@@ -35,7 +35,8 @@ To ensure consistency across the team, all implementations MUST use the followin
 **Infrastructure & Database**
 *   **Relational DB:** PostgreSQL 15+
 *   **In-Memory Store:** Redis 7+
-*   **Containerization:** Docker & Docker Compose (`docker-compose.yml`)
+*   **Containerization:** Docker & Docker Compose
+*   **Production Deployment (Ubuntu Linux):** Nginx as a reverse proxy (to serve React files and proxy API requests to FastAPI), managed entirely via a production `docker-compose.prod.yml` file.
 
 ---
 
@@ -55,7 +56,12 @@ To ensure consistency across the team, all implementations MUST use the followin
 **Phase 3: Advanced Integrations**
 - [ ] Develop the Admin Portal backend endpoints (creation of complex route objects).
 - [ ] Connect and optimize Redis caching for User Dashboard statistics.
-- [ ] Finalize Docker builds for production deployment.
+
+**Phase 4: Server Deployment (Ubuntu)**
+- [ ] Create `docker-compose.prod.yml` configured for production (no hot-reloading, exposed ports restricted).
+- [ ] Set up an Nginx container to serve the compiled frontend (`npm run build`) and route `/api` traffic to FastAPI.
+- [ ] Configure environment variables `.env` for production secrets, DB URLs, and IP/Domain settings.
+- [ ] Depoy to Ubuntu server, set up SSH access, and start the system.
 
 ---
 
