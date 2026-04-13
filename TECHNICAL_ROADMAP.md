@@ -9,6 +9,36 @@ This document tracks our ongoing progress. As tasks are completed, they should b
 
 ---
 
+## 2. Tech Stack & Library Specifications
+
+To ensure consistency across the team, all implementations MUST use the following specified technologies and libraries:
+
+**Frontend (Developer B's Primary Domain)**
+*   **Language:** JavaScript (ES6+ standard) / React JSX
+*   **Framework:** React 18+ created via [Vite](https://vitejs.dev/)
+*   **Styling:** Vanilla CSS (CSS Modules allowed for scoping). Avoid heavy component libraries to allow for custom "premium" designs.
+*   **Routing:** `react-router-dom` v6
+*   **State Management:** `zustand` (Preferred for simplicity over Redux) OR React Context API.
+*   **HTTP/API Client:** `axios`
+*   **Icons:** `lucide-react` or `react-icons`
+
+**Backend (Developer A's Primary Domain)**
+*   **Language:** Python 3.10+
+*   **Framework:** FastAPI
+*   **Server/ASGI:** `uvicorn`
+*   **Database ORM:** `SQLAlchemy` (v2 style preferred)
+*   **Database Migrations:** `alembic`
+*   **Authentication:** `PyJWT` for token generation/validation, `passlib` (with bcrypt) for password hashing.
+*   **Caching/Data Store:** `redis-py`
+*   **Environment Variables:** `pydantic-settings`
+
+**Infrastructure & Database**
+*   **Relational DB:** PostgreSQL 15+
+*   **In-Memory Store:** Redis 7+
+*   **Containerization:** Docker & Docker Compose (`docker-compose.yml`)
+
+---
+
 ## Developer A (Lead Dev - Complex Logic & Architecture)
 
 **Phase 1: Infrastructure & Core Backend**
