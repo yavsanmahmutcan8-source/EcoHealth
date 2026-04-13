@@ -3,7 +3,7 @@
 This document tracks our ongoing progress. As tasks are completed, they should be checked off `[x]` and a brief note can be added alongside them explaining any key decisions or changes.
 
 ## Guiding Principles for Collaboration
-1.  **Independence:** Tasks are designed so Developer A and Developer B do not block each other. 
+1.  **Independence:** Tasks are designed so Can and Melikşah do not block each other. 
 2.  **API Contracts:** Backend tasks should first define the expected JSON request/response formats via FastAPI Swagger (`/docs`). Frontend can use mock data until the backend endpoints are fully ready.
 3.  **Communication:** If your task requires a change in the other developer's domain, open an issue/discussion.
 
@@ -13,7 +13,7 @@ This document tracks our ongoing progress. As tasks are completed, they should b
 
 To ensure consistency across the team, all implementations MUST use the following specified technologies and libraries:
 
-**Frontend (Developer B's Primary Domain)**
+**Frontend (Melikşah's Primary Domain)**
 *   **Language:** JavaScript (ES6+ standard) / React JSX
 *   **Framework:** React 18+ created via [Vite](https://vitejs.dev/)
 *   **Styling:** Vanilla CSS (CSS Modules allowed for scoping). Avoid heavy component libraries to allow for custom "premium" designs.
@@ -22,7 +22,7 @@ To ensure consistency across the team, all implementations MUST use the followin
 *   **HTTP/API Client:** `axios`
 *   **Icons:** `lucide-react` or `react-icons`
 
-**Backend (Developer A's Primary Domain)**
+**Backend (Can's Primary Domain)**
 *   **Language:** Python 3.10+
 *   **Framework:** FastAPI
 *   **Server/ASGI:** `uvicorn`
@@ -40,7 +40,7 @@ To ensure consistency across the team, all implementations MUST use the followin
 
 ---
 
-## Developer A (Lead Dev - Complex Logic & Architecture)
+## Can (Lead Dev - Complex Logic & Architecture)
 
 **Phase 1: Infrastructure & Core Backend**
 - [x] Set up the Monorepo folder structure (`/frontend`, `/backend`) and initial `docker-compose.yml` for Postgres & Redis.
@@ -65,7 +65,7 @@ To ensure consistency across the team, all implementations MUST use the followin
 
 ---
 
-## Developer B (Teammate - UI/UX & Standard Interfaces)
+## Melikşah (Teammate - UI/UX & Standard Interfaces)
 
 **Phase 1: Frontend Scaffolding & Shared Components**
 - [ ] Initialize React (Vite) frontend project.
