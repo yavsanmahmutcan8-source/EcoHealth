@@ -43,10 +43,10 @@ To ensure consistency across the team, all implementations MUST use the followin
 ## Developer A (Lead Dev - Complex Logic & Architecture)
 
 **Phase 1: Infrastructure & Core Backend**
-- [ ] Set up the Monorepo folder structure (`/frontend`, `/backend`) and initial `docker-compose.yml` for Postgres & Redis.
-- [ ] Initialize FastAPI project with JWT Authentication Middleware.
-- [ ] Design and implement PostgreSQL Database Schema using SQLAlchemy (Users, Activities, Achievements).
-- [ ] Setup Alembic for database migrations.
+- [x] Set up the Monorepo folder structure (`/frontend`, `/backend`) and initial `docker-compose.yml` for Postgres & Redis.
+- [x] Initialize FastAPI project with JWT Authentication Middleware.
+- [x] Design and implement PostgreSQL Database Schema using SQLAlchemy (Users, Activities, Achievements).
+- [x] Setup Alembic for database migrations.
 
 **Phase 2: Complex Business Logic**
 - [ ] Implement the Gamification Engine Engine (Calculate XP, Level progression logic).

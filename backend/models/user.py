@@ -1,0 +1,22 @@
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON
+from db.base_class import Base
+
+class User(Base):
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    username = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    
+    # Physical/Personal specs (used for AI match engine)
+    age = Column(Integer, nullable=True)
+    sex = Column(String, nullable=True) 
+    weight_kg = Column(Float, nullable=True)
+    height_cm = Column(Float, nullable=True)
+    
+    # Gamification
+    xp = Column(Integer, default=0)
+    level = Column(Integer, default=1)
+    badges = Column(JSON, default=list)
+
+    is_active = Column(Boolean, default=True)
+    is_admin = Column(Boolean, default=False)
