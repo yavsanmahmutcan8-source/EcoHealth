@@ -54,8 +54,8 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Build the "Proof of Presence" verification logic (handling user submissions and optional Geolocation validation).
 
 **Phase 3: Advanced Integrations**
-- [ ] Develop the Admin Portal backend endpoints (creation of complex route objects).
-- [ ] Connect and optimize Redis caching for User Dashboard statistics.
+- [x] Develop the Admin Portal backend endpoints (creation of complex route objects).
+- [x] Connect and optimize Redis caching for User Dashboard statistics.
 
 **Phase 4: Server Deployment (Ubuntu)**
 - [ ] Create `docker-compose.prod.yml` configured for production (no hot-reloading, exposed ports restricted).
