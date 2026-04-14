@@ -58,10 +58,10 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Connect and optimize Redis caching for User Dashboard statistics.
 
 **Phase 4: Server Deployment (Ubuntu)**
-- [ ] Create `docker-compose.prod.yml` configured for production (no hot-reloading, exposed ports restricted).
-- [ ] Set up an Nginx container to serve the compiled frontend (`npm run build`) and route `/api` traffic to FastAPI.
-- [ ] Configure environment variables `.env` for production secrets, DB URLs, and IP/Domain settings.
-- [ ] Depoy to Ubuntu server, set up SSH access, and start the system.
+- [x] Create `docker-compose.prod.yml` configured for production (no hot-reloading, exposed ports restricted).
+- [x] Set up an Nginx container to serve the compiled frontend (`npm run build`) and route `/api` traffic to FastAPI.
+- [x] Configure environment variables `.env` for production secrets, DB URLs, and IP/Domain settings.
+- [x] Depoy to Ubuntu server, set up SSH access, and start the system.
 
 ---
 
