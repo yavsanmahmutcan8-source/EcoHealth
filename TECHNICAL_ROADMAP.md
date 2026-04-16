@@ -68,10 +68,10 @@ To ensure consistency across the team, all implementations MUST use the followin
 ## Melikşah (Teammate - UI/UX & Standard Interfaces)
 
 **Phase 1: Frontend Scaffolding & Shared Components**
-- [ ] Initialize React (Vite) frontend project.
-- [ ] Setup the base CSS structure (Color palette, variables, global styles - "Nature & Health" theme).
-- [ ] Build reusable UI components (Buttons, Inputs, Cards, "Toast" notifications, Skeleton Loaders).
-- [ ] Build Authentication UI (Login and Registration forms).
+- [x] Initialize React (Vite) frontend project.
+- [x] Setup the base CSS structure (Color palette, variables, global styles - "Nature & Health" theme).
+- [x] Build reusable UI components (Buttons, Inputs, Cards, "Toast" notifications, Skeleton Loaders).
+- [x] Build Authentication UI (Login and Registration forms).
 
 **Phase 2: View Construction (Mock Data)**
 - [ ] Build the User Dashboard UI (Stats charts, "Picked for You" carousel, XP progress bar module).

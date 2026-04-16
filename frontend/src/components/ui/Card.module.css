@@ -1,0 +1,6 @@
+.card {
+  padding: 1.5rem;
+  transition: var(--transition-smooth);
+}
+
+/* Inherits .glass from global for default, but allows overrides */
