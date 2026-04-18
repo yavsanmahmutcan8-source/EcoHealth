@@ -3,6 +3,7 @@ import styles from './DashboardPage.module.css';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { MapPin, Activity, Flame, Trophy } from 'lucide-react';
+import { useAuthStore } from '../../store/authStore';
 
 const mockActivities = [
   { id: 1, title: 'Sunrise Mountain Hike', difficulty: 'Moderate', time: '2 hrs', image: '🏔️' },
@@ -11,6 +12,12 @@ const mockActivities = [
 ];
 
 export function DashboardPage() {
+  const user = useAuthStore(state => state.user);
+
+  if (!user) return null;
+
+  const progressPercentage = Math.min((user.xp / user.max_xp) * 100, 100);
+
   return (
     <div className={styles.container}>
       <Navbar />
@@ -18,17 +25,17 @@ export function DashboardPage() {
       <main className={styles.main}>
         <header className={styles.welcomeSection}>
           <div>
-            <h1 className="gradient-text">Welcome back, Explorer!</h1>
-            <p>You're 240 XP away from Level 5. Get out there!</p>
+            <h1 className="gradient-text">Welcome back, {user.name.split(' ')[0]}!</h1>
+            <p>You're {user.max_xp - user.xp} XP away from Level {user.level + 1}. Get out there!</p>
           </div>
           
           <Card className={styles.xpCard}>
             <div className={styles.xpHeader}>
-              <span className={styles.levelBadge}>Level 4</span>
-              <span className={styles.xpText}>760 / 1000 XP</span>
+              <span className={styles.levelBadge}>Level {user.level}</span>
+              <span className={styles.xpText}>{user.xp} / {user.max_xp} XP</span>
             </div>
             <div className={styles.progressBarBg}>
-              <div className={styles.progressBarFill} style={{ width: '76%' }}></div>
+              <div className={styles.progressBarFill} style={{ width: `${progressPercentage}%` }}></div>
             </div>
           </Card>
         </header>
@@ -37,28 +44,28 @@ export function DashboardPage() {
           <Card className={styles.statCard}>
             <MapPin className={styles.statIcon} color="#2196f3" />
             <div className={styles.statInfo}>
-              <h3>12</h3>
+              <h3>{user.stats.trails}</h3>
               <p>Trails Conquered</p>
             </div>
           </Card>
           <Card className={styles.statCard}>
             <Activity className={styles.statIcon} color="var(--color-primary)" />
             <div className={styles.statInfo}>
-              <h3>48.2 mi</h3>
+              <h3>{user.stats.distance} mi</h3>
               <p>Distance Logged</p>
             </div>
           </Card>
           <Card className={styles.statCard}>
             <Flame className={styles.statIcon} color="#ff9800" />
             <div className={styles.statInfo}>
-              <h3>14K</h3>
+              <h3>{user.stats.calories}</h3>
               <p>Calories Burned</p>
             </div>
           </Card>
           <Card className={styles.statCard}>
             <Trophy className={styles.statIcon} color="var(--color-accent)" />
             <div className={styles.statInfo}>
-              <h3>3</h3>
+              <h3>{user.stats.gold_badges}</h3>
               <p>Gold Badges</p>
             </div>
           </Card>

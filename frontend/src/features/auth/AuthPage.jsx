@@ -3,31 +3,56 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { useToastStore } from '../../store/toastStore';
+import { useAuthStore } from '../../store/authStore';
+import { ThemeToggle } from '../../components/ui/ThemeToggle';
 import styles from './AuthPage.module.css';
 
 export function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Controlled inputs
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const addToast = useToastStore(state => state.addToast);
+  const login = useAuthStore(state => state.login);
+  const register = useAuthStore(state => state.register);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
     
-    // Mocking an API call
+    // Simulating API lag
     setTimeout(() => {
       setIsLoading(false);
-      addToast(isLogin ? "Successfully logged in!" : "Account created successfully!", "success");
-    }, 1500);
+      try {
+        if (isLogin) {
+          login(email, password);
+          addToast("Successfully logged in!", "success");
+        } else {
+          register(name, email);
+          addToast("Account created successfully!", "success");
+        }
+      } catch (err) {
+        addToast("Failed to authenticate.", "error");
+      }
+    }, 1000);
   };
 
   const handleGoogleLogin = () => {
-    // Show a toast that backend integration is required
-    addToast("Google Sign-In requires Backend API configuration (Phase 2)", "info");
+    // Treat Google Login as a new basic user login for UI demonstration
+    login(email || 'google_user', 'placeholder');
+    addToast("Logged in via Google provider!", "success");
   };
 
   return (
-    <div className={styles.authContainer}>
+    <>
+      <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 50 }}>
+        <ThemeToggle />
+      </div>
+      <div className={styles.authContainer}>
       <Card className={styles.authCard}>
         <div className={styles.header}>
           <h1 className="gradient-text">{isLogin ? 'Welcome Back' : 'Join EcoHealth'}</h1>
@@ -39,19 +64,25 @@ export function AuthPage() {
             <Input 
               label="Full Name" 
               placeholder="John Doe" 
+              value={name}
+              onChange={e => setName(e.target.value)}
               required 
             />
           )}
           <Input 
-            label="Email Address" 
-            type="email" 
+            label="Email Address (Try 'testuser')" 
+            type="text" 
             placeholder="eco@example.com" 
+            value={email}
+            onChange={e => setEmail(e.target.value)}
             required 
           />
           <Input 
             label="Password" 
             type="password" 
             placeholder="••••••••" 
+            value={password}
+            onChange={e => setPassword(e.target.value)}
             required 
           />
           
@@ -80,5 +111,6 @@ export function AuthPage() {
         </div>
       </Card>
     </div>
+    </>
   );
 }
