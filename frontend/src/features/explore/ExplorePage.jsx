@@ -1,22 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
-import { Search, Map } from 'lucide-react';
+import { Search, Map, Loader } from 'lucide-react';
 import styles from './ExplorePage.module.css';
-
-const ALL_ACTIVITIES = [
-  { id: 1, title: 'Sunrise Mountain Hike', difficulty: 'Moderate', time: '2 hrs', category: 'Hiking', loc: 'North Peak', image: '🏔️' },
-  { id: 2, title: 'Lakeside Jogging', difficulty: 'Easy', time: '45 mins', category: 'Running', loc: 'Crystal Lake', image: '🏃' },
-  { id: 3, title: 'Deep Forest Trail', difficulty: 'Hard', time: '3.5 hrs', category: 'Hiking', loc: 'Pine Woods', image: '🌲' },
-  { id: 4, title: 'Canyon Bike Ride', difficulty: 'Moderate', time: '1.5 hrs', category: 'Cycling', loc: 'Red Rock Canyon', image: '🚴' },
-  { id: 5, title: 'City Park Walk', difficulty: 'Easy', time: '30 mins', category: 'Walking', loc: 'Central Park', image: '🚶' },
-];
 
 export function ExplorePage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = ALL_ACTIVITIES.filter(a => {
+  useEffect(() => {
+    async function fetchActivities() {
+      try {
+        const res = await fetch('/api/activities');
+        if (res.ok) {
+          const data = await res.json();
+          // Provide visual emoji fallbacks just in case the backend payload misses some Image icon data.
+          const enriched = data.map(dbActivity => ({
+            ...dbActivity,
+            image: dbActivity.image || (dbActivity.category === 'Hiking' ? '🥾' : dbActivity.category === 'Running' ? '🏃' : dbActivity.category === 'Cycling' ? '🚵' : '📍'),
+            time: dbActivity.time || '1 hr',
+            loc: `Lat: ${dbActivity.latitude.toFixed(2)}, Lon: ${dbActivity.longitude.toFixed(2)}`
+          }));
+          setActivities(enriched);
+        }
+      } catch (err) {
+        console.error("Failed to fetch all activities:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchActivities();
+  }, []);
+
+  const filtered = activities.filter(a => {
     const matchesSearch = a.title.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'All' || a.category === filter;
     return matchesSearch && matchesFilter;
@@ -54,23 +72,30 @@ export function ExplorePage() {
         </div>
 
         <div className={styles.grid}>
-          {filtered.map(activity => (
-            <Card key={activity.id} className={styles.card} hoverable>
-              <div className={styles.image}>{activity.image}</div>
-              <div className={styles.content}>
-                 <div className={styles.metaTop}>
-                   <span className={styles.category}>{activity.category}</span>
-                   <span className={styles.difficulty}>{activity.difficulty}</span>
-                 </div>
-                 <h3>{activity.title}</h3>
-                 <div className={styles.metaBottom}>
-                   <span className={styles.location}><Map size={14}/> {activity.loc}</span>
-                   <span className={styles.time}>{activity.time}</span>
-                 </div>
-              </div>
-            </Card>
-          ))}
-          {filtered.length === 0 && <p className={styles.empty}>No activities found matching your filters.</p>}
+          {loading ? (
+            <div className={styles.empty}>
+              <Loader className="spin" size={32} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className={styles.empty}>No activities found matching your filters.</p>
+          ) : (
+            filtered.map(activity => (
+              <Card key={activity.id} className={styles.card} hoverable>
+                <div className={styles.image}>{activity.image}</div>
+                <div className={styles.content}>
+                   <div className={styles.metaTop}>
+                     <span className={styles.category}>{activity.category}</span>
+                     <span className={styles.difficulty}>Diff {activity.difficulty}/10</span>
+                   </div>
+                   <h3>{activity.title}</h3>
+                   <div className={styles.metaBottom}>
+                     <span className={styles.location}><Map size={14}/> {activity.loc}</span>
+                     <span className={styles.time}>{activity.time}</span>
+                   </div>
+                </div>
+              </Card>
+            ))
+          )}
         </div>
       </main>
     </div>

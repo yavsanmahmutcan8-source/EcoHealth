@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from typing import List
 
 from db.session import get_db
 from models.user import User
@@ -12,6 +13,11 @@ from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut
 from services.recommendation import generate_match_scores
 
 router = APIRouter()
+
+@router.get("/activities", response_model=List[ActivityOut])
+async def get_all_activities(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Activity))
+    return result.scalars().all()
 
 @router.post("/auth/register", response_model=UserOut)
 async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):

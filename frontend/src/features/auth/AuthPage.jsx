@@ -24,27 +24,25 @@ export function AuthPage() {
     e.preventDefault();
     setIsLoading(true);
     
-    // Simulating API lag
-    setTimeout(() => {
-      setIsLoading(false);
-      try {
-        if (isLogin) {
-          login(email, password);
-          addToast("Successfully logged in!", "success");
-        } else {
-          register(name, email);
-          addToast("Account created successfully!", "success");
-        }
-      } catch (err) {
-        addToast("Failed to authenticate.", "error");
+    try {
+      if (isLogin) {
+        // the form 'email' field acts as 'username' per OAuth config in FastAPI
+        await login(email, password);
+        addToast("Successfully logged in!", "success");
+      } else {
+        await register(name, email, password);
+        addToast("Account created successfully!", "success");
       }
-    }, 1000);
+    } catch (err) {
+      console.error(err);
+      addToast(err.message || "Failed to authenticate.", "error");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleGoogleLogin = () => {
-    // Treat Google Login as a new basic user login for UI demonstration
-    login(email || 'google_user', 'placeholder');
-    addToast("Logged in via Google provider!", "success");
+    addToast("Google Auth API backend pending.", "error");
   };
 
   return (

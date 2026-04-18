@@ -1,18 +1,38 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import styles from './DashboardPage.module.css';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
-import { MapPin, Activity, Flame, Trophy } from 'lucide-react';
+import { MapPin, Activity, Flame, Trophy, Loader } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
-
-const mockActivities = [
-  { id: 1, title: 'Sunrise Mountain Hike', difficulty: 'Moderate', time: '2 hrs', image: '🏔️' },
-  { id: 2, title: 'Lakeside Jogging', difficulty: 'Easy', time: '45 mins', image: '🏃' },
-  { id: 3, title: 'Deep Forest Trail', difficulty: 'Hard', time: '3.5 hrs', image: '🌲' },
-];
 
 export function DashboardPage() {
   const user = useAuthStore(state => state.user);
+  const token = useAuthStore(state => state.token);
+  const [recommendations, setRecommendations] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadRecommendations() {
+      if (!token) return;
+      try {
+        const res = await fetch('/api/dashboard/recommendations', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Backend returns: {"picked_for_you": [...], "cached": True/False}
+          setRecommendations(data.picked_for_you || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch recommendations', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadRecommendations();
+  }, [token]);
 
   if (!user) return null;
 
@@ -76,18 +96,28 @@ export function DashboardPage() {
           <p className={styles.subtitle}>Based on your recent activity and fitness level</p>
           
           <div className={styles.carousel}>
-            {mockActivities.map(activity => (
-              <Card key={activity.id} className={styles.activityCard} hoverable>
-                <div className={styles.activityImage}>{activity.image}</div>
-                <div className={styles.activityDetails}>
-                  <h3>{activity.title}</h3>
-                  <div className={styles.activityMeta}>
-                    <span className={styles.difficulty}>{activity.difficulty}</span>
-                    <span className={styles.time}>{activity.time}</span>
+            {loading ? (
+              <div style={{ padding: '2rem', display: 'flex', justifyContent: 'center', width: '100%', color: 'var(--color-text-muted)' }}>
+                <Loader className="spin" size={32} />
+              </div>
+            ) : recommendations.length > 0 ? (
+              recommendations.map(activity => (
+                <Card key={activity.id} className={styles.activityCard} hoverable>
+                  <div className={styles.activityImage}>{activity.image || '🏞️'}</div>
+                  <div className={styles.activityDetails}>
+                    <h3>{activity.title}</h3>
+                    <div className={styles.activityMeta}>
+                      <span className={styles.difficulty}>{activity.difficulty} / 10 Match</span>
+                      <span className={styles.time}>{activity.category}</span>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              ))
+            ) : (
+              <div style={{ padding: '2rem', textAlign: 'center', width: '100%', color: 'var(--color-text-muted)' }}>
+                No recommendations found. Keep exploring to teach the algorithm!
+              </div>
+            )}
           </div>
         </section>
       </main>

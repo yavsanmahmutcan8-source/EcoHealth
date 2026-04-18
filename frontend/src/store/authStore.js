@@ -1,58 +1,106 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-const TEST_USER_DATA = {
-  name: 'Test Explorer',
-  email: 'testuser',
-  level: 4,
-  xp: 760,
-  max_xp: 1000,
-  stats: {
-    trails: 12,
-    distance: 48.2,
-    calories: '14K',
-    gold_badges: 3
-  }
-};
-
-const FRESH_USER_DATA = (name, email) => ({
-  name: name || 'New Explorer',
-  email: email,
-  level: 1,
-  xp: 0,
-  max_xp: 100,
-  stats: {
-    trails: 0,
-    distance: 0,
-    calories: '0',
-    gold_badges: 0
-  }
-});
-
 export const useAuthStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
-      login: (email, password) => {
-        console.log('[Auth] Attempting login with email:', email);
-        if (email === 'testuser' && password === 'testuser123') {
-          console.log('[Auth] Test user successfully matched.');
-          set({ user: TEST_USER_DATA });
-          return true;
-        } else {
-          console.log('[Auth] Fallback fresh user matched.');
-          set({ user: FRESH_USER_DATA('User', email) });
-          return true;
+      token: null,
+      
+      login: async (username, password) => {
+        console.log('[Auth] Attempting live API login with username:', username);
+        
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Login failed');
+        }
+
+        const data = await response.json();
+        const token = data.access_token;
+        set({ token });
+        
+        await get().fetchUser();
+      },
+      
+      register: async (username, email, password) => {
+        console.log('[Auth] Attempting to register via API:', username);
+        
+        const response = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            username: username,
+            email: email,
+            password: password
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Registration failed');
+        }
+        
+        // Auto-login after registration
+        await get().login(username, password);
+      },
+
+      fetchUser: async () => {
+        const token = get().token;
+        if (!token) return;
+
+        try {
+          const response = await fetch('/api/users/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          if (!response.ok) {
+            set({ user: null, token: null });
+            throw new Error('Session expired');
+          }
+          
+          const rawUser = await response.json();
+          // Map backend User data to our expected frontend schema dynamically
+          const formattedUser = {
+            id: rawUser.id,
+            name: rawUser.username,
+            email: rawUser.email,
+            level: rawUser.level || 1,
+            xp: rawUser.xp || 0,
+            max_xp: rawUser.level ? (rawUser.level) * 200 : 100,
+            stats: {
+              trails: 0,
+              distance: 0,
+              calories: '0',
+              gold_badges: (rawUser.badges || []).length
+            },
+            badges: rawUser.badges || []
+          };
+          set({ user: formattedUser });
+        } catch (error) {
+          console.error('[Auth] Failed to fetch user profile:', error);
+          set({ user: null, token: null });
         }
       },
-      register: (name, email) => {
-        console.log('[Auth] Registering user:', email);
-        set({ user: FRESH_USER_DATA(name, email) });
-        return true;
-      },
+
       logout: () => {
-        console.log('[Auth] LOGOUT triggered. Dropping user state.');
-        set({ user: null });
+        console.log('[Auth] LOGOUT triggered. Dropping API token and user state.');
+        set({ user: null, token: null });
       }
     }),
     {
