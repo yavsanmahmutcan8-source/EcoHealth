@@ -34,19 +34,26 @@ export const useAuthStore = create(
     (set) => ({
       user: null,
       login: (email, password) => {
+        console.log('[Auth] Attempting login with email:', email);
         if (email === 'testuser' && password === 'testuser123') {
+          console.log('[Auth] Test user successfully matched.');
           set({ user: TEST_USER_DATA });
           return true;
         } else {
+          console.log('[Auth] Fallback fresh user matched.');
           set({ user: FRESH_USER_DATA('User', email) });
           return true;
         }
       },
       register: (name, email) => {
+        console.log('[Auth] Registering user:', email);
         set({ user: FRESH_USER_DATA(name, email) });
         return true;
       },
-      logout: () => set({ user: null })
+      logout: () => {
+        console.log('[Auth] LOGOUT triggered. Dropping user state.');
+        set({ user: null });
+      }
     }),
     {
       name: 'auth-storage', // unique name

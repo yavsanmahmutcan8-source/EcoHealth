@@ -1,14 +1,20 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import styles from './Navbar.module.css';
 import { Leaf, User, Bell } from 'lucide-react';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { useAuthStore } from '../../store/authStore';
 
 export function Navbar() {
-  const logout = useAuthStore(state => state.logout);
   const user = useAuthStore(state => state.user);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleProfileClick = (e) => {
+    e.preventDefault();
+    console.log('[Navbar] Avatar clicked! Navigating from:', location.pathname, 'to: /profile');
+    navigate('/profile');
+  };
 
   return (
     <nav className={`glass ${styles.navbar}`}>
@@ -18,8 +24,8 @@ export function Navbar() {
       </div>
       
       <div className={styles.navLinks}>
-         <Link to="/dashboard" className={location.pathname === '/dashboard' ? styles.active : ''}>Dashboard</Link>
-         <Link to="/explore" className={location.pathname === '/explore' ? styles.active : ''}>Explore</Link>
+         <div onClick={() => navigate('/dashboard')} className={location.pathname === '/dashboard' ? styles.active : ''} style={{cursor: 'pointer', color: 'var(--color-text-muted)'}}>Dashboard</div>
+         <div onClick={() => navigate('/explore')} className={location.pathname === '/explore' ? styles.active : ''} style={{cursor: 'pointer', color: 'var(--color-text-muted)'}}>Explore</div>
       </div>
 
       <div className={styles.actions}>
@@ -29,9 +35,9 @@ export function Navbar() {
         <button className={styles.iconBtn}>
           <Bell size={20} />
         </button>
-        <Link to="/profile" className={styles.avatar} title="View Profile">
+        <div className={styles.avatar} onClick={handleProfileClick} title="View Profile">
           <User size={20} />
-        </Link>
+        </div>
       </div>
     </nav>
   );
