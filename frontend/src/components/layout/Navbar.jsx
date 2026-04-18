@@ -29,9 +29,6 @@ export function Navbar() {
         <button className={styles.iconBtn}>
           <Bell size={20} />
         </button>
-        <button className={styles.iconBtn} onClick={logout} title="Log Out" style={{ marginLeft: '-0.5rem' }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Log Out</span>
-        </button>
         <Link to="/profile" className={styles.avatar} title="View Profile">
           <User size={20} />
         </Link>

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 const TEST_USER_DATA = {
   name: 'Test Explorer',
@@ -28,20 +29,27 @@ const FRESH_USER_DATA = (name, email) => ({
   }
 });
 
-export const useAuthStore = create((set) => ({
-  user: null,
-  login: (email, password) => {
-    if (email === 'testuser' && password === 'testuser123') {
-      set({ user: TEST_USER_DATA });
-      return true;
-    } else {
-      set({ user: FRESH_USER_DATA('User', email) });
-      return true;
+export const useAuthStore = create(
+  persist(
+    (set) => ({
+      user: null,
+      login: (email, password) => {
+        if (email === 'testuser' && password === 'testuser123') {
+          set({ user: TEST_USER_DATA });
+          return true;
+        } else {
+          set({ user: FRESH_USER_DATA('User', email) });
+          return true;
+        }
+      },
+      register: (name, email) => {
+        set({ user: FRESH_USER_DATA(name, email) });
+        return true;
+      },
+      logout: () => set({ user: null })
+    }),
+    {
+      name: 'auth-storage', // unique name
     }
-  },
-  register: (name, email) => {
-    set({ user: FRESH_USER_DATA(name, email) });
-    return true;
-  },
-  logout: () => set({ user: null })
-}));
+  )
+);

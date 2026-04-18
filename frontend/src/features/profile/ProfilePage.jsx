@@ -29,11 +29,18 @@ export function ProfilePage() {
           <div className={styles.avatarLarge}>
             <User size={48} />
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             <h1 className="gradient-text">{user.name}</h1>
             <p className={styles.email}>{user.email}</p>
             <div className={styles.levelTag}>Level {user.level} Explorer</div>
           </div>
+          <button 
+            type="button" 
+            onClick={() => useAuthStore.getState().logout()} 
+            style={{ padding: '0.75rem 1.5rem', background: 'var(--color-bg)', border: '1px solid var(--glass-border)', borderRadius: 'var(--radius-full)', color: 'var(--color-text)', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Log Out
+          </button>
         </div>
 
         <section className={styles.badgesSection}>
