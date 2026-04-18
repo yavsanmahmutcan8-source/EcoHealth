@@ -164,3 +164,26 @@
   font-weight: 600;
   color: var(--color-primary);
 }
+
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+    gap: 2rem;
+  }
+  .xpCard {
+    min-width: 100%;
+  }
+  .statsGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .statCard {
+    padding: 1rem;
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+  }
+  .activityCard {
+    min-width: 240px;
+  }
+}

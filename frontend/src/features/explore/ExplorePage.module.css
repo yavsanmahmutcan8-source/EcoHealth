@@ -137,3 +137,20 @@
   padding: 3rem;
   color: var(--color-text-muted);
 }
+
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+  .tools {
+    flex-direction: column;
+    width: 100%;
+  }
+  .searchBox, .filterDropdown, .searchInput {
+    width: 100%;
+  }
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

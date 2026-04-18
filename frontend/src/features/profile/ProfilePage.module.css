@@ -119,3 +119,25 @@
   margin: 0;
   line-height: 1.4;
 }
+
+@media (max-width: 768px) {
+  .main {
+    padding: 1rem;
+    gap: 2rem;
+  }
+  .userHeader {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.5rem;
+    gap: 1rem;
+  }
+  .avatarLarge {
+    width: 80px;
+    height: 80px;
+  }
+  .badgeCard {
+    flex-direction: column;
+    text-align: center;
+    padding: 1rem;
+  }
+}
