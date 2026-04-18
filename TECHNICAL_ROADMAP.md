@@ -75,7 +75,7 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Implement Global Dark Mode Toggle.
 
 **Phase 2: View Construction (Mock Data)**
-- [ ] Build the User Dashboard UI (Stats charts, "Picked for You" carousel, XP progress bar module).
+- [x] Build the User Dashboard UI (Stats charts, "Picked for You" carousel, XP progress bar module).
 - [ ] Build the Explore Page UI (Filterable list layout, Activity detail cards).
 - [ ] Build the Profile Page UI (Badge gallery showing color/grayscale distinction).
 
