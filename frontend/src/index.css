@@ -32,9 +32,25 @@
   --glass-bg: rgba(255, 255, 255, 0.65);
   --glass-border: rgba(255, 255, 255, 0.4);
   --glass-blur: blur(16px);
+  --bg-gradient-1: hsla(111,46%,85%,1);
+  --bg-gradient-2: hsla(109,33%,92%,1);
   
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --transition-smooth: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+[data-theme='dark'] {
+  --color-bg: #121212;
+  --color-surface: #1e1e1e;
+  
+  --color-text: #eceff1;
+  --color-text-muted: #b0bec5;
+  
+  --glass-bg: rgba(30, 30, 30, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  --bg-gradient-1: hsla(111, 46%, 12%, 1);
+  --bg-gradient-2: hsla(109, 33%, 15%, 1);
 }
 
 * {
@@ -48,12 +64,13 @@ body {
   background-color: var(--color-bg);
   /* Organic subtle background gradient */
   background-image: 
-    radial-gradient(at 0% 0%, hsla(111,46%,85%,1) 0, transparent 50%), 
-    radial-gradient(at 100% 100%, hsla(109,33%,92%,1) 0, transparent 50%);
+    radial-gradient(at 0% 0%, var(--bg-gradient-1) 0, transparent 50%), 
+    radial-gradient(at 100% 100%, var(--bg-gradient-2) 0, transparent 50%);
   background-attachment: fixed;
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 h1, h2, h3, h4, h5, h6 {

@@ -1,0 +1,29 @@
+.toggleBtn {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  color: var(--color-text);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition-smooth);
+}
+
+.toggleBtn:hover {
+  transform: scale(1.05);
+  box-shadow: var(--shadow-md);
+  color: var(--color-primary);
+}
+
+.toggleBtn:active {
+  transform: scale(0.95);
+}
