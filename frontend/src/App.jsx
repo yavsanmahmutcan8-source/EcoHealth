@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthPage } from './features/auth/AuthPage';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ExplorePage } from './features/explore/ExplorePage';
+import { ProfilePage } from './features/profile/ProfilePage';
 import { ToastContainer } from './components/ui/Toast';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { useThemeStore } from './store/themeStore';
@@ -23,6 +24,7 @@ function App() {
         <Route path="/auth" element={!user ? <AuthPage /> : <Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={user ? <DashboardPage /> : <Navigate to="/auth" />} />
         <Route path="/explore" element={user ? <ExplorePage /> : <Navigate to="/auth" />} />
+        <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/auth" />} />
         
         {/* Redirect root to auth ALWAYS */}
         <Route path="/" element={<Navigate to="/auth" replace />} />
