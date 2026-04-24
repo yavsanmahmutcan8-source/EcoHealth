@@ -16,8 +16,28 @@ from services.recommendation import generate_match_scores
 router = APIRouter()
 
 @router.get("/activities", response_model=List[ActivityOut])
-async def get_all_activities(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Activity))
+async def get_all_activities(
+    lat: float = None, 
+    lng: float = None, 
+    radius_km: float = 10.0, 
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Activity)
+    
+    if lat is not None and lng is not None:
+        # Simple bounding box filtering (Before PostGIS implementation)
+        # 1 degree of latitude is ~111 km
+        lat_delta = radius_km / 111.0
+        # Longitude distance varies by latitude, this is a rough approximation
+        import math
+        lng_delta = radius_km / (111.0 * math.cos(math.radians(lat)))
+        
+        query = query.where(
+            Activity.latitude.between(lat - lat_delta, lat + lat_delta),
+            Activity.longitude.between(lng - lng_delta, lng + lng_delta)
+        )
+        
+    result = await db.execute(query)
     return result.scalars().all()
 
 @router.post("/auth/register", response_model=UserOut)

@@ -11,6 +11,10 @@ class Activity(Base):
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
     
+    # Advanced Map Data
+    route_polyline = Column(Text, nullable=True) # Encoded polyline string
+    map_boundaries = Column(String, nullable=True) # Bounding box or viewpoint info
+    
     # Activity characteristics
     difficulty = Column(Integer, default=1) # 1 to 5 scale
     estimated_duration_minutes = Column(Integer, default=60)

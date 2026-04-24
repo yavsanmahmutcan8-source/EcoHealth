@@ -39,6 +39,10 @@ class ActivityCreate(BaseModel):
     latitude: float
     longitude: float
 
+    # Optional map data
+    route_polyline: Optional[str] = None
+    map_boundaries: Optional[str] = None
+
 class ActivityOut(ActivityCreate):
     id: int
     
