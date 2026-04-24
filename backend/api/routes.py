@@ -12,6 +12,8 @@ from core.security import verify_password, get_password_hash, create_access_toke
 from api.deps import get_current_user, get_current_active_admin
 from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut
 from services.recommendation import generate_match_scores
+from services.gamification import process_activity_completion
+from api.schemas import ActivityCompletionResult
 
 router = APIRouter()
 
@@ -161,3 +163,39 @@ async def create_activity(
     await db.commit()
     await db.refresh(new_activity)
     return new_activity
+
+@router.post("/activities/{activity_id}/complete", response_model=ActivityCompletionResult)
+async def complete_activity(
+    activity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # 1. Fetch activity
+    result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    activity = result.scalars().first()
+    
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+        
+    # 2. Increment user completion count
+    current_user.completed_activities_count += 1
+    
+    # 3. Process gamification
+    calc_result = process_activity_completion(
+        user_xp=current_user.xp,
+        user_level=current_user.level,
+        user_badges=current_user.badges,
+        total_activities=current_user.completed_activities_count,
+        activity_xp_reward=activity.xp_reward
+    )
+    
+    # 4. Save progress to DB
+    current_user.xp = calc_result["new_xp"]
+    current_user.level = calc_result["new_level"]
+    current_user.badges = calc_result["total_badges"]
+    
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    
+    return calc_result

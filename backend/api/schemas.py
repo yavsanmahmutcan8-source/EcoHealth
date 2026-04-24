@@ -48,3 +48,10 @@ class ActivityOut(ActivityCreate):
     
     class Config:
         from_attributes = True
+
+class ActivityCompletionResult(BaseModel):
+    new_xp: int
+    new_level: int
+    leveled_up: bool
+    newly_unlocked_badges: list
+    total_badges: List[str]

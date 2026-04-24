@@ -17,6 +17,7 @@ class User(Base):
     xp = Column(Integer, default=0)
     level = Column(Integer, default=1)
     badges = Column(JSON, default=list)
+    completed_activities_count = Column(Integer, default=0)
 
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
