@@ -5,7 +5,7 @@ This document contains the necessary information for the EcoHealth production/st
 ## Server Details
 - **Hosting Provider:** Amazon Web Services (AWS) Lightsail
 - **Operating System:** Ubuntu 22.04 LTS
-- **Public IPv4 Address:** `3.67.91.158`
+- **Public IPv4 Address:** `52.58.30.77`
 - **Username:** `ubuntu`
 - **SSH Key Used:** `id_ed25519_ecohealth` (You must have this private key on your machine to connect)
 
@@ -14,7 +14,7 @@ This document contains the necessary information for the EcoHealth production/st
 ### Connecting directly via Terminal
 If you have the `id_ed25519_ecohealth` key loaded on your machine, you can connect using:
 ```bash
-ssh -i ~/.ssh/id_ed25519_ecohealth ubuntu@3.67.91.158
+ssh -i ~/.ssh/id_ed25519_ecohealth ubuntu@52.58.30.77
 ```
 
 ### Future Network Configuration Requirements (AWS Console)
