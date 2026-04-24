@@ -34,6 +34,22 @@ export const useAuthStore = create(
         await get().fetchUser();
       },
       
+      googleLogin: async (credential) => {
+        const response = await fetch('/api/auth/google', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ credential })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Google Login failed');
+        }
+        const data = await response.json();
+        const token = data.access_token;
+        set({ token });
+        await get().fetchUser();
+      },
+      
       register: async (username, email, password) => {
         console.log('[Auth] Attempting to register via API:', username);
         

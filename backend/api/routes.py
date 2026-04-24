@@ -3,7 +3,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from typing import List
-
+import requests
+from pydantic import BaseModel
 from db.session import get_db
 from models.user import User
 from models.activity import Activity
@@ -47,6 +48,54 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
         
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+class GoogleAuth(BaseModel):
+    credential: str
+
+@router.post("/auth/google", response_model=Token)
+async def google_login(payload: GoogleAuth, db: AsyncSession = Depends(get_db)):
+    # Since useGoogleLogin in React returns an access_token by default, we fetch user info from Google
+    resp = requests.get(
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        headers={"Authorization": f"Bearer {payload.credential}"}
+    )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=400, detail="Invalid Google Token")
+        
+    user_info = resp.json()
+    email = user_info['email']
+    name = user_info.get('name', '')
+    
+    # Check if user exists
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalars().first()
+    
+    if not user:
+        # Create Google SSO user without a real password
+        username_base = email.split('@')[0]
+        # Check if username exists, append a suffix if it does
+        username = username_base
+        
+        user_result = await db.execute(select(User).where(User.username == username))
+        if user_result.scalars().first():
+            import random
+            username = f"{username_base}_{random.randint(1000, 9999)}"
+
+        hashed_pw = get_password_hash("google_sso_managed_password_" + email)
+        user = User(
+            username=username,
+            email=email,
+            hashed_password=hashed_pw,
+            age=30, # Default values
+            weight_kg=70.0,
+            height_cm=170.0
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 

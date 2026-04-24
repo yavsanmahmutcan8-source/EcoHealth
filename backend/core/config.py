@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Google Auth
+    GOOGLE_CLIENT_ID: str = "480390592998-1dh6uuku2fj28k02dubd93deglqed9b6.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET: str = "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"
+
     class Config:
         env_file = ".env"
 

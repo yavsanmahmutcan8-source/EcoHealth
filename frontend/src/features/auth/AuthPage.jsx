@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -19,6 +20,7 @@ export function AuthPage() {
   const addToast = useToastStore(state => state.addToast);
   const login = useAuthStore(state => state.login);
   const register = useAuthStore(state => state.register);
+  const googleLogin = useAuthStore(state => state.googleLogin);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -41,9 +43,20 @@ export function AuthPage() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    addToast("Google Auth API backend pending.", "error");
-  };
+  const handleGoogleLogin = useGoogleLogin({
+    onSuccess: async (tokenResponse) => {
+      setIsLoading(true);
+      try {
+        await googleLogin(tokenResponse.access_token);
+        addToast("Successfully logged in with Google!", "success");
+      } catch (err) {
+        addToast(err.message || "Google authentication failed.", "error");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    onError: () => addToast("Google popup failed", "error")
+  });
 
   return (
     <>
