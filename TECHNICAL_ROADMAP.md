@@ -93,8 +93,8 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Connect Frontend React pages to Backend API endpoints using Axios/Fetch (e.g., retrieving actual user data).
 - [x] Setup secure backend authentication logic and Redis caching.
 - [x] Develop the gamification sub-service logic (awards/badges calculation).
-- [ ] Implement state management (React Context or Zustand) to keep user session/XP points synchronized across the app.
-- [ ] Build the Admin Portal UI (Simple table views for users, basic forms for adding new activities).
+- [x] Implement state management (React Context or Zustand) to keep user session/XP points synchronized across the app.
+- [x] Build the Admin Portal UI (Simple table views for users, basic forms for adding new activities).
 
 **Phase 4: Map Integration & Actionable UI**
 - [ ] Integrate a mapping library (e.g., Google Maps API or Leaflet.js) to visually display activity routes and details on the app.

@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     xp: int
     level: int
     badges: List[str]
+    is_admin: bool = False
 
     class Config:
         from_attributes = True

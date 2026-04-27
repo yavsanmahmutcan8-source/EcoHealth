@@ -26,6 +26,9 @@ export function Navbar() {
       <div className={styles.navLinks}>
          <div onClick={() => navigate('/dashboard')} className={location.pathname === '/dashboard' ? styles.active : ''} style={{cursor: 'pointer', color: 'var(--color-text-muted)'}}>Dashboard</div>
          <div onClick={() => navigate('/explore')} className={location.pathname === '/explore' ? styles.active : ''} style={{cursor: 'pointer', color: 'var(--color-text-muted)'}}>Explore</div>
+         {user?.is_admin && (
+           <div onClick={() => navigate('/admin')} className={location.pathname === '/admin' ? styles.active : ''} style={{cursor: 'pointer', color: 'var(--color-text-muted)'}}>Admin</div>
+         )}
       </div>
 
       <div className={styles.actions}>

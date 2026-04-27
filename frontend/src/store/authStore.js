@@ -105,7 +105,8 @@ export const useAuthStore = create(
               calories: '0',
               gold_badges: (rawUser.badges || []).length
             },
-            badges: rawUser.badges || []
+            badges: rawUser.badges || [],
+            is_admin: rawUser.is_admin || false
           };
           set({ user: formattedUser });
         } catch (error) {

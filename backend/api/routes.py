@@ -256,3 +256,11 @@ async def admin_update_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+@router.get("/admin/users", response_model=List[UserOut])
+async def admin_get_users(
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User))
+    return result.scalars().all()
