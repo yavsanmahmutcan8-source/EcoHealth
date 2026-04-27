@@ -2,7 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Search, Map, Loader } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
 import styles from './ExplorePage.module.css';
+
+// Fix leaflet marker icon paths
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
 
 export function ExplorePage() {
   const [search, setSearch] = useState('');
@@ -69,6 +80,23 @@ export function ExplorePage() {
               <option value="Walking">Walking</option>
             </select>
           </div>
+        </div>
+
+        <div className={styles.mapWrapper} style={{ height: '400px', width: '100%', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: '2rem' }}>
+          <MapContainer center={[39.92077, 32.85411]} zoom={6} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {filtered.map(activity => (
+              <Marker key={activity.id} position={[activity.latitude, activity.longitude]}>
+                <Popup>
+                  <strong>{activity.title}</strong><br />
+                  {activity.category} - Diff {activity.difficulty}/10
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
         </div>
 
         <div className={styles.grid}>
