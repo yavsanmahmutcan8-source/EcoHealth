@@ -10,7 +10,7 @@ from models.user import User
 from models.activity import Activity
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
-from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate
+from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
 from api.schemas import ActivityCompletionResult
@@ -166,7 +166,7 @@ async def create_activity(
 @router.put("/admin/activities/{activity_id}", response_model=ActivityOut)
 async def update_activity(
     activity_id: int,
-    activity_in: ActivityCreate,
+    activity_in: ActivityUpdate,
     current_admin: User = Depends(get_current_active_admin),
     db: AsyncSession = Depends(get_db)
 ):

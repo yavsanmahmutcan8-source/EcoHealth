@@ -49,6 +49,17 @@ class ActivityCreate(BaseModel):
     map_boundaries: Optional[str] = None
     visibility_state: Optional[str] = "publish"
 
+class ActivityUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    difficulty: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    route_polyline: Optional[str] = None
+    map_boundaries: Optional[str] = None
+    visibility_state: Optional[str] = None
+
 class ActivityOut(ActivityCreate):
     id: int
     
