@@ -28,7 +28,7 @@ def upgrade() -> None:
     
     # We must handle the index creation carefully. If location already existed, maybe just create it?
     # Actually PostGIS doesn't always need alembic to create indices this way, but let's keep it.
-    op.create_index('idx_activity_location', 'activity', ['location'], unique=False, postgresql_using='gist')
+    # op.create_index('idx_activity_location', 'activity', ['location'], unique=False, postgresql_using='gist')
     
     op.drop_column('activity', 'longitude')
     op.drop_column('activity', 'latitude')
