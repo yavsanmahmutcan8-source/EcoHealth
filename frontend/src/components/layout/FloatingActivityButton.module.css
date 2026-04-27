@@ -1,0 +1,88 @@
+.fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  z-index: 999;
+  border: none;
+  background: linear-gradient(135deg, #4CAF50, #2E7D32);
+  color: white;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  box-shadow: 0 8px 32px rgba(76, 175, 80, 0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: fabSlideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.fab:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 12px 40px rgba(76, 175, 80, 0.5);
+}
+
+.fabPulse {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #4CAF50, #2E7D32);
+  animation: fabPulseAnim 2s infinite;
+  z-index: -1;
+}
+
+.fabContent {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fabText {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.fabTitle {
+  font-size: 0.8rem;
+  font-weight: 700;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fabTime {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes fabSlideIn {
+  from {
+    transform: translateY(100px) scale(0.5);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes fabPulseAnim {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.7;
+  }
+}
+
+@media (max-width: 768px) {
+  .fab {
+    bottom: 1rem;
+    right: 1rem;
+  }
+}

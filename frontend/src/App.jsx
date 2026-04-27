@@ -5,6 +5,8 @@ import { DashboardPage } from './features/dashboard/DashboardPage';
 import { ExplorePage } from './features/explore/ExplorePage';
 import { ProfilePage } from './features/profile/ProfilePage';
 import { AdminPage } from './features/admin/AdminPage';
+import { ActivitySessionPage } from './features/activity/ActivitySessionPage';
+import { FloatingActivityButton } from './components/layout/FloatingActivityButton';
 import { ToastContainer } from './components/ui/Toast';
 import { ThemeToggle } from './components/ui/ThemeToggle';
 import { useThemeStore } from './store/themeStore';
@@ -39,10 +41,12 @@ function App() {
         <Route path="/explore" element={user ? <ExplorePage /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={user ? <ProfilePage /> : <Navigate to="/auth" />} />
         <Route path="/admin" element={user?.is_admin ? <AdminPage /> : <Navigate to="/dashboard" />} />
+        <Route path="/activity" element={user ? <ActivitySessionPage /> : <Navigate to="/auth" />} />
         
         {/* Redirect root to auth ALWAYS */}
         <Route path="/" element={<Navigate to="/auth" replace />} />
       </Routes>
+      {user && <FloatingActivityButton />}
       <ToastContainer />
     </BrowserRouter>
   );

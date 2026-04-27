@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Search, Map, Loader } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
+import { Search, Map, Loader, Play } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { ActiveSessionModal } from './ActiveSessionModal';
+import { Modal } from '../../components/ui/Modal';
+import { useActivitySessionStore } from '../../store/activitySessionStore';
 import styles from './ExplorePage.module.css';
 
 // Fix leaflet marker icon paths
@@ -36,12 +38,14 @@ function ChangeView({ center }) {
 }
 
 export function ExplorePage() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedActivity, setSelectedActivity] = useState(null);
-  const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]); // Default center
+  const [previewActivity, setPreviewActivity] = useState(null);
+  const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]);
+  const { startActivity, activeActivity, sessionState } = useActivitySessionStore();
 
   const fetchActivities = async (lat, lng) => {
     setLoading(true);
@@ -153,38 +157,100 @@ export function ExplorePage() {
           ) : filtered.length === 0 ? (
             <p className={styles.empty}>No activities found matching your filters.</p>
           ) : (
-            filtered.map(activity => (
+             filtered.map(activity => {
+              const routePts = (() => { try { return activity.route_polyline ? JSON.parse(activity.route_polyline) : []; } catch { return []; } })();
+              return (
               <Card key={activity.id} className={styles.card} hoverable>
                 <div className={styles.image}>{activity.image}</div>
                 <div className={styles.content}>
                    <div className={styles.metaTop}>
                      <span className={styles.category}>{activity.category}</span>
-                     <span className={styles.difficulty}>Diff {activity.difficulty}/10</span>
+                     <span className={styles.difficulty}>Diff {activity.difficulty}/5</span>
                    </div>
                    <h3>{activity.title}</h3>
                    <div className={styles.metaBottom}>
                      <span className={styles.location}><Map size={14}/> {activity.loc}</span>
-                     <span className={styles.time}>{activity.time}</span>
+                     <span className={styles.time}>+{activity.xp_reward || 50} XP</span>
                    </div>
                    <Button 
                      variant="primary" 
                      style={{ marginTop: '1rem', width: '100%' }}
-                     onClick={() => setSelectedActivity(activity)}
+                     onClick={() => setPreviewActivity(activity)}
                    >
-                     Complete Activity
+                     <Play size={16} style={{ marginRight: '0.5rem' }} /> View & Start
                    </Button>
                 </div>
               </Card>
-            ))
+            );})
           )}
         </div>
       </main>
 
-      <ActiveSessionModal 
-        isOpen={!!selectedActivity} 
-        onClose={() => setSelectedActivity(null)} 
-        activity={selectedActivity} 
-      />
+      {/* Activity Preview Modal */}
+      <Modal isOpen={!!previewActivity} onClose={() => setPreviewActivity(null)} title={previewActivity?.title || 'Activity Details'}>
+        {previewActivity && (
+          <div style={{ textAlign: 'center' }}>
+            {/* Route preview map */}
+            <div style={{ height: '250px', borderRadius: '8px', overflow: 'hidden', marginBottom: '1rem' }}>
+              <MapContainer 
+                center={[previewActivity.latitude, previewActivity.longitude]} 
+                zoom={14} 
+                scrollWheelZoom={false} 
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <Marker position={[previewActivity.latitude, previewActivity.longitude]}>
+                  <Popup>🏁 Start Point</Popup>
+                </Marker>
+                {(() => {
+                  try {
+                    const pts = JSON.parse(previewActivity.route_polyline);
+                    if (pts.length > 1) return <Polyline positions={pts} color="#4CAF50" weight={4} />;
+                  } catch {}
+                  return null;
+                })()}
+              </MapContainer>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.5rem', textAlign: 'left' }}>
+              <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <small style={{ color: 'var(--color-text-muted)' }}>Category</small>
+                <p style={{ margin: 0, fontWeight: 600 }}>{previewActivity.category}</p>
+              </div>
+              <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <small style={{ color: 'var(--color-text-muted)' }}>Difficulty</small>
+                <p style={{ margin: 0, fontWeight: 600 }}>{previewActivity.difficulty}/5</p>
+              </div>
+              <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <small style={{ color: 'var(--color-text-muted)' }}>XP Reward</small>
+                <p style={{ margin: 0, fontWeight: 600, color: 'var(--color-primary)' }}>+{previewActivity.xp_reward || 50} XP</p>
+              </div>
+              <div style={{ background: 'var(--glass-bg)', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                <small style={{ color: 'var(--color-text-muted)' }}>Duration</small>
+                <p style={{ margin: 0, fontWeight: 600 }}>~{previewActivity.estimated_duration_minutes || 60} min</p>
+              </div>
+            </div>
+
+            {activeActivity && sessionState === 'active' ? (
+              <p style={{ color: '#f44336', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                ⚠️ You already have an active activity. Complete or abandon it first.
+              </p>
+            ) : (
+              <Button 
+                variant="primary" 
+                style={{ width: '100%' }}
+                onClick={() => {
+                  startActivity(previewActivity);
+                  setPreviewActivity(null);
+                  navigate('/activity');
+                }}
+              >
+                <Play size={18} style={{ marginRight: '0.5rem' }} /> Start Activity
+              </Button>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
