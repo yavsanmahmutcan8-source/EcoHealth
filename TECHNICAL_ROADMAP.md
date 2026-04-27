@@ -98,8 +98,8 @@ To ensure consistency across the team, all implementations MUST use the followin
 
 **Phase 4: Map Integration & Actionable UI**
 - [x] Integrate a mapping library (e.g., Google Maps API or Leaflet.js) to visually display activity routes and details on the app.
-- [ ] Build the "Active Session" experience: Prompt for user location permissions and implement the "Complete Task" interaction button.
-- [ ] Design and implement dynamic success animations/modals that visually reward the user with earned XP and new Badges upon activity completion.
+- [x] Build the "Active Session" experience: Prompt for user location permissions and implement the "Complete Task" interaction button.
+- [x] Design and implement dynamic success animations/modals that visually reward the user with earned XP and new Badges upon activity completion.
 
 **Phase 5: Geographical Discovery & Interactive Admin Builder (New)**
 - [ ] Build an interactive "Admin Route Builder" UI using Map plugins (click-to-draw paths, drag-and-drop markers for custom activity start/end points).

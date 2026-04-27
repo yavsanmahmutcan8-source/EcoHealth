@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
+import { Button } from '../../components/ui/Button';
 import { Search, Map, Loader } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { ActiveSessionModal } from './ActiveSessionModal';
 import styles from './ExplorePage.module.css';
 
 // Fix leaflet marker icon paths
@@ -20,6 +22,7 @@ export function ExplorePage() {
   const [filter, setFilter] = useState('All');
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedActivity, setSelectedActivity] = useState(null);
 
   useEffect(() => {
     async function fetchActivities() {
@@ -120,12 +123,25 @@ export function ExplorePage() {
                      <span className={styles.location}><Map size={14}/> {activity.loc}</span>
                      <span className={styles.time}>{activity.time}</span>
                    </div>
+                   <Button 
+                     variant="primary" 
+                     style={{ marginTop: '1rem', width: '100%' }}
+                     onClick={() => setSelectedActivity(activity)}
+                   >
+                     Complete Activity
+                   </Button>
                 </div>
               </Card>
             ))
           )}
         </div>
       </main>
+
+      <ActiveSessionModal 
+        isOpen={!!selectedActivity} 
+        onClose={() => setSelectedActivity(null)} 
+        activity={selectedActivity} 
+      />
     </div>
   );
 }
