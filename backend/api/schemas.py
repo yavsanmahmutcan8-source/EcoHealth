@@ -30,6 +30,11 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True
 
+class AdminUserUpdate(BaseModel):
+    xp: Optional[int] = None
+    level: Optional[int] = None
+    badges: Optional[List[str]] = None
+
 # Activity Schemas
 class ActivityCreate(BaseModel):
     title: str
@@ -42,6 +47,7 @@ class ActivityCreate(BaseModel):
     # Optional map data
     route_polyline: Optional[str] = None
     map_boundaries: Optional[str] = None
+    visibility_state: Optional[str] = "publish"
 
 class ActivityOut(ActivityCreate):
     id: int

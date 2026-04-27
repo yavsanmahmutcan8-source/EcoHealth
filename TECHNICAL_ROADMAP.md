@@ -63,6 +63,16 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Configure environment variables `.env` for production secrets, DB URLs, and IP/Domain settings.
 - [x] Depoy to Ubuntu server, set up SSH access, and start the system.
 
+**Phase 5: Maps & Activity Progression**
+- [x] Enhance database schemas and DTOs to store map data for Activities (GPS coordinates, route polylines, map boundaries).
+- [x] Implement robust backend REST APIs to serve and filter location-based activities for frontend map consumption.
+- [x] Build the "Complete Activity" endpoint: Process completion requests, trigger the Gamification Engine to award XP/Badges, and securely persist user progress.
+
+**Phase 6: Geospatial Engine & Advanced Admin Backend (New)**
+- [x] Integrate PostGIS (via `GeoAlchemy2`) to natively support advanced spatial queries (City-level boundaries, Geographic Bounding Boxes, Radius Searches).
+- [x] Build rigorous Admin-Only REST endpoints: Full CRUD with draft/publish visibility states, strict manual XP/Badge assignment, and Route drawing data (GeoJSON/Polylines).
+- [x] Develop the localized discovery endpoint: Filter activities dynamically based on the user's provided latitude, longitude, and map zoom radius.
+
 ---
 
 ## Melikşah (Teammate - UI/UX & Standard Interfaces)
@@ -85,6 +95,16 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Develop the gamification sub-service logic (awards/badges calculation).
 - [ ] Implement state management (React Context or Zustand) to keep user session/XP points synchronized across the app.
 - [ ] Build the Admin Portal UI (Simple table views for users, basic forms for adding new activities).
+
+**Phase 4: Map Integration & Actionable UI**
+- [ ] Integrate a mapping library (e.g., Google Maps API or Leaflet.js) to visually display activity routes and details on the app.
+- [ ] Build the "Active Session" experience: Prompt for user location permissions and implement the "Complete Task" interaction button.
+- [ ] Design and implement dynamic success animations/modals that visually reward the user with earned XP and new Badges upon activity completion.
+
+**Phase 5: Geographical Discovery & Interactive Admin Builder (New)**
+- [ ] Build an interactive "Admin Route Builder" UI using Map plugins (click-to-draw paths, drag-and-drop markers for custom activity start/end points).
+- [ ] Design the comprehensive Admin Dashboard: Data tables with bulk-publish actions, and detailed forms to assign dynamic XP multipliers and Badge SVGs to activities.
+- [ ] Implement localized User Discovery: Auto-request browser Geolocation, focus the default Map View to the user's city/neighborhood, and silently reload local activities as the user pans the map.
 
 ---
 

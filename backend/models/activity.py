@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, Text, Boolean, ForeignKey
+from geoalchemy2 import Geography
 from db.base_class import Base
 
 class Activity(Base):
@@ -7,9 +8,8 @@ class Activity(Base):
     description = Column(Text, nullable=True)
     category = Column(String, index=True) # e.g. "Hiking", "Running", "Cycling"
     
-    # Geolocation bounds (simple latitude/longitude center for geofencing)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
+    # Geolocation bounds (advanced spatial support)
+    location = Column(Geography('POINT', srid=4326), nullable=True)
     
     # Advanced Map Data
     route_polyline = Column(Text, nullable=True) # Encoded polyline string
@@ -21,3 +21,18 @@ class Activity(Base):
     xp_reward = Column(Integer, default=50)
 
     is_verified_route = Column(Boolean, default=False)
+    visibility_state = Column(String, default="publish") # "draft", "publish"
+
+    @property
+    def latitude(self):
+        from geoalchemy2.shape import to_shape
+        if self.location is not None:
+            return to_shape(self.location).y
+        return None
+
+    @property
+    def longitude(self):
+        from geoalchemy2.shape import to_shape
+        if self.location is not None:
+            return to_shape(self.location).x
+        return None

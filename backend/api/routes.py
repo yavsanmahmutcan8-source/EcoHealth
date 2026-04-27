@@ -10,7 +10,7 @@ from models.user import User
 from models.activity import Activity
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
-from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut
+from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
 from api.schemas import ActivityCompletionResult
@@ -24,19 +24,16 @@ async def get_all_activities(
     radius_km: float = 10.0, 
     db: AsyncSession = Depends(get_db)
 ):
+    from sqlalchemy import func
     query = select(Activity)
     
     if lat is not None and lng is not None:
-        # Simple bounding box filtering (Before PostGIS implementation)
-        # 1 degree of latitude is ~111 km
-        lat_delta = radius_km / 111.0
-        # Longitude distance varies by latitude, this is a rough approximation
-        import math
-        lng_delta = radius_km / (111.0 * math.cos(math.radians(lat)))
-        
         query = query.where(
-            Activity.latitude.between(lat - lat_delta, lat + lat_delta),
-            Activity.longitude.between(lng - lng_delta, lng + lng_delta)
+            func.ST_DWithin(
+                Activity.location, 
+                func.ST_GeogFromText(f'SRID=4326;POINT({lng} {lat})'), 
+                radius_km * 1000
+            )
         )
         
     result = await db.execute(query)
@@ -158,11 +155,51 @@ async def create_activity(
     current_admin: User = Depends(get_current_active_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    new_activity = Activity(**activity_in.dict())
+    activity_data = activity_in.dict(exclude={"latitude", "longitude"})
+    new_activity = Activity(**activity_data)
+    new_activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
     db.add(new_activity)
     await db.commit()
     await db.refresh(new_activity)
     return new_activity
+
+@router.put("/admin/activities/{activity_id}", response_model=ActivityOut)
+async def update_activity(
+    activity_id: int,
+    activity_in: ActivityCreate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+        
+    update_data = activity_in.dict(exclude={"latitude", "longitude"}, exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(activity, key, value)
+        
+    if activity_in.latitude is not None and activity_in.longitude is not None:
+        activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
+        
+    await db.commit()
+    await db.refresh(activity)
+    return activity
+
+@router.delete("/admin/activities/{activity_id}")
+async def delete_activity(
+    activity_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+        
+    await db.delete(activity)
+    await db.commit()
+    return {"message": "Activity deleted successfully"}
 
 @router.post("/activities/{activity_id}/complete", response_model=ActivityCompletionResult)
 async def complete_activity(
@@ -199,3 +236,23 @@ async def complete_activity(
     await db.refresh(current_user)
     
     return calc_result
+
+@router.put("/admin/users/{user_id}", response_model=UserOut)
+async def admin_update_user(
+    user_id: int,
+    user_in: AdminUserUpdate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    update_data = user_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(user, key, value)
+        
+    await db.commit()
+    await db.refresh(user)
+    return user
