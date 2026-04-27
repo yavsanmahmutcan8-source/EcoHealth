@@ -44,6 +44,8 @@ class ActivityCreate(BaseModel):
     difficulty: int
     latitude: float
     longitude: float
+    xp_reward: Optional[int] = 50
+    estimated_duration_minutes: Optional[int] = 60
 
     # Optional map data
     route_polyline: Optional[str] = None
@@ -57,6 +59,8 @@ class ActivityUpdate(BaseModel):
     difficulty: Optional[int] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    xp_reward: Optional[int] = None
+    estimated_duration_minutes: Optional[int] = None
     route_polyline: Optional[str] = None
     map_boundaries: Optional[str] = None
     visibility_state: Optional[str] = None

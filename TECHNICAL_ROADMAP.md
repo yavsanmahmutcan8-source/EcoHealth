@@ -102,9 +102,9 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Design and implement dynamic success animations/modals that visually reward the user with earned XP and new Badges upon activity completion.
 
 **Phase 5: Geographical Discovery & Interactive Admin Builder (New)**
-- [ ] Build an interactive "Admin Route Builder" UI using Map plugins (click-to-draw paths, drag-and-drop markers for custom activity start/end points).
-- [ ] Design the comprehensive Admin Dashboard: Data tables with bulk-publish actions, and detailed forms to assign dynamic XP multipliers and Badge SVGs to activities.
-- [ ] Implement localized User Discovery: Auto-request browser Geolocation, focus the default Map View to the user's city/neighborhood, and silently reload local activities as the user pans the map.
+- [x] Build an interactive "Admin Route Builder" UI using Map plugins (click-to-draw paths, drag-and-drop markers for custom activity start/end points).
+- [x] Design the comprehensive Admin Dashboard: Data tables with bulk-publish actions, and detailed forms to assign dynamic XP multipliers and Badge SVGs to activities.
+- [x] Implement localized User Discovery: Auto-request browser Geolocation, focus the default Map View to the user's city/neighborhood, and silently reload local activities as the user pans the map.
 
 ---
 

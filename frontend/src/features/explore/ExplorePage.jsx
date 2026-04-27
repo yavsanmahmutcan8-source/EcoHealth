@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Search, Map, Loader } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { ActiveSessionModal } from './ActiveSessionModal';
@@ -17,36 +17,77 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
+function MapEventHandler({ onBoundsChange }) {
+  useMapEvents({
+    moveend: (e) => {
+      const center = e.target.getCenter();
+      onBoundsChange(center.lat, center.lng);
+    }
+  });
+  return null;
+}
+
+function ChangeView({ center }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+}
+
 export function ExplorePage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState(null);
+  const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]); // Default center
+
+  const fetchActivities = async (lat, lng) => {
+    setLoading(true);
+    try {
+      const url = (lat && lng) ? `/api/activities?lat=${lat}&lng=${lng}&radius_km=50` : '/api/activities';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const enriched = data.map(dbActivity => ({
+          ...dbActivity,
+          image: dbActivity.image || (dbActivity.category === 'Hiking' ? '🥾' : dbActivity.category === 'Running' ? '🏃' : dbActivity.category === 'Cycling' ? '🚵' : '📍'),
+          time: dbActivity.time || '1 hr',
+          loc: `Lat: ${dbActivity.latitude.toFixed(2)}, Lon: ${dbActivity.longitude.toFixed(2)}`
+        }));
+        setActivities(enriched);
+      }
+    } catch (err) {
+      console.error("Failed to fetch all activities:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function fetchActivities() {
-      try {
-        const res = await fetch('/api/activities');
-        if (res.ok) {
-          const data = await res.json();
-          // Provide visual emoji fallbacks just in case the backend payload misses some Image icon data.
-          const enriched = data.map(dbActivity => ({
-            ...dbActivity,
-            image: dbActivity.image || (dbActivity.category === 'Hiking' ? '🥾' : dbActivity.category === 'Running' ? '🏃' : dbActivity.category === 'Cycling' ? '🚵' : '📍'),
-            time: dbActivity.time || '1 hr',
-            loc: `Lat: ${dbActivity.latitude.toFixed(2)}, Lon: ${dbActivity.longitude.toFixed(2)}`
-          }));
-          setActivities(enriched);
+    // Attempt localized user discovery on mount
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setMapCenter([lat, lng]);
+          fetchActivities(lat, lng);
+        },
+        () => {
+          // Fallback if denied
+          fetchActivities(mapCenter[0], mapCenter[1]);
         }
-      } catch (err) {
-        console.error("Failed to fetch all activities:", err);
-      } finally {
-        setLoading(false);
-      }
+      );
+    } else {
+      fetchActivities(mapCenter[0], mapCenter[1]);
     }
-    fetchActivities();
   }, []);
+
+  const handleMapPan = (lat, lng) => {
+    fetchActivities(lat, lng);
+  };
 
   const filtered = activities.filter(a => {
     const matchesSearch = a.title.toLowerCase().includes(search.toLowerCase());
@@ -86,7 +127,9 @@ export function ExplorePage() {
         </div>
 
         <div className={styles.mapWrapper} style={{ height: '400px', width: '100%', borderRadius: 'var(--radius-md)', overflow: 'hidden', marginBottom: '2rem' }}>
-          <MapContainer center={[39.92077, 32.85411]} zoom={6} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+          <MapContainer center={mapCenter} zoom={11} scrollWheelZoom={false} style={{ height: '100%', width: '100%' }}>
+            <ChangeView center={mapCenter} />
+            <MapEventHandler onBoundsChange={handleMapPan} />
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
