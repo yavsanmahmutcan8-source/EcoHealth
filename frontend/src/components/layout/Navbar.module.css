@@ -18,6 +18,7 @@
   gap: 0.5rem;
   font-size: 1.25rem;
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .icon {
@@ -30,31 +31,19 @@
   align-items: center;
 }
 
-.navLinks a {
+.navLinks a, .navLinks div {
   color: var(--color-text-muted);
   font-weight: 500;
   transition: var(--transition-smooth);
 }
 
-.navLinks a:hover {
+.navLinks a:hover, .navLinks div:hover {
   color: var(--color-text);
 }
 
-.navLinks a.active {
-  color: var(--color-primary);
-  font-weight: 600;
-  position: relative;
-}
-
-.navLinks a.active::after {
-  content: '';
-  position: absolute;
-  bottom: -4px;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: var(--color-primary);
-  border-radius: var(--radius-full);
+.active {
+  color: var(--color-primary) !important;
+  font-weight: 600 !important;
 }
 
 .actions {
@@ -71,6 +60,7 @@
   align-items: center;
   justify-content: center;
   transition: var(--transition-smooth);
+  cursor: pointer;
 }
 
 .iconBtn:hover {
@@ -88,21 +78,33 @@
   justify-content: center;
   color: var(--color-text-muted);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
   .navbar {
-    padding: 0.75rem 1rem;
-    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    gap: 0.25rem;
+  }
+  .logo {
+    font-size: 1rem;
+    gap: 0.35rem;
   }
   .logo span {
     display: none;
   }
   .navLinks {
-    gap: 1rem;
-    font-size: 0.875rem;
+    gap: 0.6rem;
+    font-size: 0.8rem;
   }
   .actions {
-    gap: 0.5rem;
+    gap: 0.4rem;
+  }
+  .iconBtn {
+    padding: 0.25rem;
+  }
+  .avatar {
+    width: 32px;
+    height: 32px;
   }
 }

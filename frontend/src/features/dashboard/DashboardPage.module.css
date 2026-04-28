@@ -16,7 +16,11 @@
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2rem;
+  gap: 1.5rem;
+}
+
+.welcomeSection h1 {
+  font-size: 1.75rem;
 }
 
 .welcomeSection p {
@@ -25,7 +29,7 @@
 }
 
 .xpCard {
-  min-width: 300px;
+  min-width: 280px;
   flex: 1;
   max-width: 400px;
 }
@@ -87,6 +91,7 @@
   box-shadow: var(--shadow-sm);
   width: 48px;
   height: 48px;
+  flex-shrink: 0;
 }
 
 .statInfo h3 {
@@ -116,6 +121,8 @@
   overflow-x: auto;
   padding-bottom: 1rem;
   scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
 }
 
 .carousel::-webkit-scrollbar {
@@ -132,31 +139,33 @@
   padding: 0;
   overflow: hidden;
   cursor: pointer;
+  scroll-snap-align: start;
 }
 
 .activityImage {
-  height: 140px;
+  height: 130px;
   background: var(--glass-bg);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 4rem;
+  font-size: 3.5rem;
   border-bottom: 1px solid var(--glass-border);
 }
 
 .activityDetails {
-  padding: 1.25rem;
+  padding: 1rem;
 }
 
 .activityDetails h3 {
-  font-size: 1.125rem;
+  font-size: 1rem;
   margin-bottom: 0.5rem;
 }
 
 .activityMeta {
   display: flex;
+  justify-content: space-between;
   gap: 1rem;
-  font-size: 0.875rem;
+  font-size: 0.8rem;
   color: var(--color-text-muted);
 }
 
@@ -165,25 +174,67 @@
   color: var(--color-primary);
 }
 
+.time {
+  font-weight: 600;
+}
+
 @media (max-width: 768px) {
   .main {
     padding: 1rem;
-    gap: 2rem;
+    gap: 1.5rem;
+  }
+  .welcomeSection {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .welcomeSection h1 {
+    font-size: 1.35rem;
   }
   .xpCard {
     min-width: 100%;
+    max-width: 100%;
   }
   .statsGrid {
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
+    gap: 0.75rem;
   }
   .statCard {
-    padding: 1rem;
-    flex-direction: column;
-    text-align: center;
-    gap: 0.5rem;
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+  .statIcon {
+    width: 40px;
+    height: 40px;
+    padding: 0.5rem;
+  }
+  .statInfo h3 {
+    font-size: 1.15rem;
+  }
+  .statInfo p {
+    font-size: 0.75rem;
+  }
+  .carousel {
+    gap: 0.75rem;
   }
   .activityCard {
     min-width: 240px;
+  }
+  .activityImage {
+    height: 110px;
+    font-size: 3rem;
+  }
+  .activityDetails {
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+  .statCard {
+    flex-direction: row;
+    text-align: left;
   }
 }
