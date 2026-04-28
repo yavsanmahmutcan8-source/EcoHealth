@@ -127,7 +127,7 @@ export function DashboardPage() {
                   <div className={styles.activityDetails}>
                     <h3>{activity.title}</h3>
                     <div className={styles.activityMeta}>
-                      <span className={styles.difficulty}>{activity.category}</span>
+                      <span className={styles.difficulty}>{activity.match_score_percentage}% Match</span>
                       <span className={styles.time}>+{activity.xp_reward || 50} XP</span>
                     </div>
                     <Button 

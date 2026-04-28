@@ -66,9 +66,16 @@ def generate_match_scores(user: Any, activities: List[Any]) -> List[Dict]:
         match_score = round(max(0.0, 100 - penalty), 1)
         
         scored_activities.append({
+            "id": activity.id,
             "activity_id": activity.id,
             "title": activity.title,
+            "category": activity.category,
             "difficulty": activity.difficulty,
+            "xp_reward": activity.xp_reward,
+            "latitude": activity.latitude,
+            "longitude": activity.longitude,
+            "route_polyline": activity.route_polyline,
+            "estimated_duration_minutes": activity.estimated_duration_minutes,
             "match_score_percentage": match_score
         })
         
