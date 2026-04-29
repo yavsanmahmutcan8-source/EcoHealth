@@ -5,6 +5,7 @@ import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { ActivityReviews } from '../../components/ui/ActivityReviews';
 import { MapPin, Activity, Flame, Trophy, Loader, Play } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -25,9 +26,15 @@ export function DashboardPage() {
   const user = useAuthStore(state => state.user);
   const token = useAuthStore(state => state.token);
   const [recommendations, setRecommendations] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [previewActivity, setPreviewActivity] = useState(null);
   const { startActivity, activeActivity, sessionState } = useActivitySessionStore();
+
+  // Build emoji lookup from categories
+  const emojiMap = {};
+  categories.forEach(c => { emojiMap[c.name] = c.emoji; });
+  const getEmoji = (category) => emojiMap[category] || '📍';
 
   useEffect(() => {
     async function loadRecommendations() {
@@ -51,6 +58,11 @@ export function DashboardPage() {
     }
     loadRecommendations();
   }, [token]);
+
+  // Fetch categories
+  useEffect(() => {
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then(setCategories).catch(() => {});
+  }, []);
 
   if (!user) return null;
 
@@ -122,7 +134,7 @@ export function DashboardPage() {
               recommendations.map(activity => (
                 <Card key={activity.id} className={styles.activityCard} hoverable>
                   <div className={styles.activityImage}>
-                    {activity.image || (activity.category === 'Hiking' ? '🥾' : activity.category === 'Running' ? '🏃' : activity.category === 'Cycling' ? '🚵' : '🏞️')}
+                    {getEmoji(activity.category)}
                   </div>
                   <div className={styles.activityDetails}>
                     <h3>{activity.title}</h3>
@@ -212,6 +224,9 @@ export function DashboardPage() {
                 <Play size={18} style={{ marginRight: '0.5rem' }} /> Start Activity
               </Button>
             )}
+
+            {/* Reviews section */}
+            <ActivityReviews activityId={previewActivity.id} />
           </div>
         )}
       </Modal>

@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents, useMap 
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Modal } from '../../components/ui/Modal';
+import { ActivityReviews } from '../../components/ui/ActivityReviews';
 import { useActivitySessionStore } from '../../store/activitySessionStore';
 import styles from './ExplorePage.module.css';
 
@@ -42,10 +43,16 @@ export function ExplorePage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [activities, setActivities] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [previewActivity, setPreviewActivity] = useState(null);
   const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]);
   const { startActivity, activeActivity, sessionState } = useActivitySessionStore();
+
+  // Build emoji lookup from categories
+  const emojiMap = {};
+  categories.forEach(c => { emojiMap[c.name] = c.emoji; });
+  const getEmoji = (category) => emojiMap[category] || '📍';
 
   const fetchActivities = async (lat, lng) => {
     setLoading(true);
@@ -56,7 +63,6 @@ export function ExplorePage() {
         const data = await res.json();
         const enriched = data.map(dbActivity => ({
           ...dbActivity,
-          image: dbActivity.image || (dbActivity.category === 'Hiking' ? '🥾' : dbActivity.category === 'Running' ? '🏃' : dbActivity.category === 'Cycling' ? '🚵' : '📍'),
           time: dbActivity.time || '1 hr',
           loc: `Lat: ${dbActivity.latitude.toFixed(2)}, Lon: ${dbActivity.longitude.toFixed(2)}`
         }));
@@ -68,6 +74,11 @@ export function ExplorePage() {
       setLoading(false);
     }
   };
+
+  // Fetch categories from API
+  useEffect(() => {
+    fetch('/api/categories').then(r => r.ok ? r.json() : []).then(setCategories).catch(() => {});
+  }, []);
 
   useEffect(() => {
     // Attempt localized user discovery on mount
@@ -122,10 +133,9 @@ export function ExplorePage() {
               onChange={e => setFilter(e.target.value)}
             >
               <option value="All">All Categories</option>
-              <option value="Hiking">Hiking</option>
-              <option value="Running">Running</option>
-              <option value="Cycling">Cycling</option>
-              <option value="Walking">Walking</option>
+              {categories.map(c => (
+                <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -161,7 +171,7 @@ export function ExplorePage() {
               const routePts = (() => { try { return activity.route_polyline ? JSON.parse(activity.route_polyline) : []; } catch { return []; } })();
               return (
               <Card key={activity.id} className={styles.card} hoverable>
-                <div className={styles.image}>{activity.image}</div>
+                <div className={styles.image}>{getEmoji(activity.category)}</div>
                 <div className={styles.content}>
                    <div className={styles.metaTop}>
                      <span className={styles.category}>{activity.category}</span>
@@ -248,6 +258,9 @@ export function ExplorePage() {
                 <Play size={18} style={{ marginRight: '0.5rem' }} /> Start Activity
               </Button>
             )}
+
+            {/* Reviews section */}
+            <ActivityReviews activityId={previewActivity.id} />
           </div>
         )}
       </Modal>

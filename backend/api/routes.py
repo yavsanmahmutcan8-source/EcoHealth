@@ -1,19 +1,25 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import List
+from sqlalchemy import func as sa_func
+from typing import List, Optional
 import requests
 from pydantic import BaseModel
 from db.session import get_db
 from models.user import User
 from models.activity import Activity
+from models.category import Category
+from models.review import Review
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
-from api.schemas import UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate
+from api.schemas import (
+    UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
+    ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
+    ReviewCreate, ReviewOut
+)
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
-from api.schemas import ActivityCompletionResult
 
 router = APIRouter()
 
@@ -264,3 +270,178 @@ async def admin_get_users(
 ):
     result = await db.execute(select(User))
     return result.scalars().all()
+
+# =============================================
+# CATEGORY ENDPOINTS
+# =============================================
+
+@router.get("/categories", response_model=List[CategoryOut])
+async def get_categories(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Category).order_by(Category.name))
+    return result.scalars().all()
+
+@router.post("/admin/categories", response_model=CategoryOut)
+async def create_category(
+    cat_in: CategoryCreate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    # Check for duplicate name
+    existing = await db.execute(select(Category).where(Category.name == cat_in.name))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Category with this name already exists")
+    new_cat = Category(**cat_in.dict())
+    db.add(new_cat)
+    await db.commit()
+    await db.refresh(new_cat)
+    return new_cat
+
+@router.put("/admin/categories/{category_id}", response_model=CategoryOut)
+async def update_category(
+    category_id: int,
+    cat_in: CategoryUpdate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Category).where(Category.id == category_id))
+    cat = result.scalars().first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    update_data = cat_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(cat, key, value)
+    await db.commit()
+    await db.refresh(cat)
+    return cat
+
+@router.delete("/admin/categories/{category_id}")
+async def delete_category(
+    category_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Category).where(Category.id == category_id))
+    cat = result.scalars().first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+    await db.delete(cat)
+    await db.commit()
+    return {"message": "Category deleted successfully"}
+
+# =============================================
+# REVIEW ENDPOINTS
+# =============================================
+
+@router.post("/activities/{activity_id}/reviews", response_model=ReviewOut)
+async def create_review(
+    activity_id: int,
+    review_in: ReviewCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Validate rating range
+    if not (1 <= review_in.rating <= 5):
+        raise HTTPException(status_code=400, detail="Rating must be between 1 and 5")
+    
+    # Check activity exists
+    act_result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    if not act_result.scalars().first():
+        raise HTTPException(status_code=404, detail="Activity not found")
+    
+    # Check if user already reviewed
+    existing = await db.execute(
+        select(Review).where(Review.user_id == current_user.id, Review.activity_id == activity_id)
+    )
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="You have already reviewed this activity")
+    
+    new_review = Review(
+        user_id=current_user.id,
+        activity_id=activity_id,
+        rating=review_in.rating,
+        comment=review_in.comment
+    )
+    db.add(new_review)
+    await db.commit()
+    await db.refresh(new_review)
+    
+    return ReviewOut(
+        id=new_review.id,
+        user_id=new_review.user_id,
+        activity_id=new_review.activity_id,
+        rating=new_review.rating,
+        comment=new_review.comment,
+        created_at=new_review.created_at,
+        username=current_user.username
+    )
+
+@router.get("/activities/{activity_id}/reviews", response_model=List[ReviewOut])
+async def get_reviews(
+    activity_id: int,
+    sort: Optional[str] = Query("date", regex="^(rating|date)$"),
+    order: Optional[str] = Query("desc", regex="^(asc|desc)$"),
+    db: AsyncSession = Depends(get_db)
+):
+    query = select(Review, User.username).join(User, Review.user_id == User.id).where(
+        Review.activity_id == activity_id
+    )
+    
+    if sort == "rating":
+        col = Review.rating
+    else:
+        col = Review.created_at
+    
+    if order == "asc":
+        query = query.order_by(col.asc())
+    else:
+        query = query.order_by(col.desc())
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    return [
+        ReviewOut(
+            id=review.id,
+            user_id=review.user_id,
+            activity_id=review.activity_id,
+            rating=review.rating,
+            comment=review.comment,
+            created_at=review.created_at,
+            username=username
+        )
+        for review, username in rows
+    ]
+
+@router.delete("/reviews/{review_id}")
+async def delete_review(
+    review_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Review).where(Review.id == review_id))
+    review = result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    # Only the author or an admin can delete
+    if review.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this review")
+    await db.delete(review)
+    await db.commit()
+    return {"message": "Review deleted successfully"}
+
+@router.get("/activities/{activity_id}/rating")
+async def get_activity_rating(
+    activity_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(
+            sa_func.avg(Review.rating).label("average_rating"),
+            sa_func.count(Review.id).label("review_count")
+        ).where(Review.activity_id == activity_id)
+    )
+    row = result.one()
+    return {
+        "average_rating": round(float(row.average_rating), 1) if row.average_rating else None,
+        "review_count": row.review_count or 0
+    }

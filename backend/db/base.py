@@ -3,3 +3,5 @@
 from db.base_class import Base
 from models.user import User
 from models.activity import Activity
+from models.category import Category
+from models.review import Review

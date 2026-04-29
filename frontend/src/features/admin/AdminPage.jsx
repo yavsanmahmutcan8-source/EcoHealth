@@ -7,6 +7,7 @@ import { useToastStore } from '../../store/toastStore';
 import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { Trash2, Edit3, Plus } from 'lucide-react';
 import styles from './AdminPage.module.css';
 
 // Fix leaflet marker icon paths
@@ -38,17 +39,24 @@ export function AdminPage() {
   const addToast = useToastStore(state => state.addToast);
   const [users, setUsers] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('users'); // 'users', 'activities', 'create'
+  const [activeTab, setActiveTab] = useState('users'); // 'users', 'activities', 'create', 'categories'
   
   // Activity form state
   const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Hiking');
+  const [category, setCategory] = useState('');
   const [difficulty, setDifficulty] = useState(1);
   const [xpReward, setXpReward] = useState(50);
   const [duration, setDuration] = useState(60);
   const [routePoints, setRoutePoints] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Category form state
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatEmoji, setNewCatEmoji] = useState('📍');
+  const [newCatColor, setNewCatColor] = useState('#4CAF50');
+  const [editingCat, setEditingCat] = useState(null);
 
   useEffect(() => {
     fetchUsers();
@@ -82,9 +90,21 @@ export function AdminPage() {
     }
   };
 
+  const fetchCategories = async () => {
+    try {
+      const res = await fetch('/api/categories');
+      if (res.ok) {
+        const data = await res.json();
+        setCategories(data);
+        if (data.length > 0 && !category) setCategory(data[0].name);
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     fetchUsers();
     fetchActivities();
+    fetchCategories();
   }, [token]);
 
   const handleBulkPublish = async (state) => {
@@ -147,10 +167,11 @@ export function AdminPage() {
           <p>Manage users and create new activities</p>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '2rem', flexWrap: 'wrap' }}>
           <Button variant={activeTab === 'users' ? 'primary' : 'secondary'} onClick={() => setActiveTab('users')}>Users</Button>
-          <Button variant={activeTab === 'activities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('activities')}>Activities Table</Button>
+          <Button variant={activeTab === 'activities' ? 'primary' : 'secondary'} onClick={() => setActiveTab('activities')}>Activities</Button>
           <Button variant={activeTab === 'create' ? 'primary' : 'secondary'} onClick={() => setActiveTab('create')}>Route Builder</Button>
+          <Button variant={activeTab === 'categories' ? 'primary' : 'secondary'} onClick={() => setActiveTab('categories')}>Categories</Button>
         </div>
 
         {activeTab === 'users' && (
@@ -214,10 +235,10 @@ export function AdminPage() {
                 <div className={styles.formGroup}>
                   <label>Category</label>
                   <select className={styles.input} value={category} onChange={e => setCategory(e.target.value)}>
-                    <option value="Hiking">Hiking</option>
-                    <option value="Running">Running</option>
-                    <option value="Cycling">Cycling</option>
-                    <option value="Walking">Walking</option>
+                    {categories.map(c => (
+                      <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
+                    ))}
+                    {categories.length === 0 && <option value="">No categories — create one first</option>}
                   </select>
                 </div>
                 <div className={styles.formGroup}>
@@ -253,6 +274,88 @@ export function AdminPage() {
                 {isSubmitting ? 'Creating...' : 'Create Published Activity'}
               </button>
             </form>
+          </Card>
+        )}
+
+        {activeTab === 'categories' && (
+          <Card className={styles.card}>
+            <h2>Category Management</h2>
+            <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem', fontSize: '0.875rem' }}>Create and manage activity categories with custom emojis.</p>
+
+            {/* Create / Edit form */}
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!newCatName.trim()) return;
+              try {
+                const url = editingCat ? `/api/admin/categories/${editingCat.id}` : '/api/admin/categories';
+                const method = editingCat ? 'PUT' : 'POST';
+                const res = await fetch(url, {
+                  method,
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ name: newCatName, emoji: newCatEmoji, color: newCatColor })
+                });
+                if (!res.ok) {
+                  const err = await res.json().catch(() => ({}));
+                  throw new Error(err.detail || 'Failed');
+                }
+                addToast(editingCat ? 'Category updated!' : 'Category created!', 'success');
+                setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setEditingCat(null);
+                fetchCategories();
+              } catch (err) {
+                addToast(err.message, 'error');
+              }
+            }} style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className={styles.formGroup} style={{ flex: 2, minWidth: '140px', marginBottom: 0 }}>
+                <label>Name</label>
+                <input type="text" className={styles.input} value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="e.g. Swimming" required />
+              </div>
+              <div className={styles.formGroup} style={{ flex: 0.5, minWidth: '70px', marginBottom: 0 }}>
+                <label>Emoji</label>
+                <input type="text" className={styles.input} value={newCatEmoji} onChange={e => setNewCatEmoji(e.target.value)} maxLength={4} />
+              </div>
+              <div className={styles.formGroup} style={{ flex: 0.5, minWidth: '70px', marginBottom: 0 }}>
+                <label>Color</label>
+                <input type="color" className={styles.input} value={newCatColor} onChange={e => setNewCatColor(e.target.value)} style={{ padding: '4px', height: '42px' }} />
+              </div>
+              <Button variant="primary" type="submit" style={{ minWidth: '110px' }}>
+                <Plus size={16} style={{ marginRight: '0.3rem' }} /> {editingCat ? 'Update' : 'Add'}
+              </Button>
+              {editingCat && (
+                <Button variant="secondary" onClick={() => { setEditingCat(null); setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); }} style={{ minWidth: '80px' }}>Cancel</Button>
+              )}
+            </form>
+
+            {/* Categories list */}
+            <div style={{ overflowX: 'auto' }}>
+              <table className={styles.table}>
+                <thead>
+                  <tr><th>Emoji</th><th>Name</th><th>Color</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
+                </thead>
+                <tbody>
+                  {categories.map(c => (
+                    <tr key={c.id}>
+                      <td style={{ fontSize: '1.5rem' }}>{c.emoji}</td>
+                      <td>{c.name}</td>
+                      <td><span style={{ display: 'inline-block', width: 20, height: 20, borderRadius: '50%', background: c.color, verticalAlign: 'middle' }}></span></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
+                          <button onClick={() => { setEditingCat(c); setNewCatName(c.name); setNewCatEmoji(c.emoji); setNewCatColor(c.color); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Edit"><Edit3 size={16} /></button>
+                          <button onClick={async () => {
+                            if (!confirm(`Delete category "${c.name}"?`)) return;
+                            await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                            addToast('Category deleted', 'info');
+                            fetchCategories();
+                          }} style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Delete"><Trash2 size={16} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {categories.length === 0 && (
+                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No categories yet. Create one above!</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </Card>
         )}
       </main>

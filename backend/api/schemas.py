@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
+from datetime import datetime
 
 # Token Schemas
 class Token(BaseModel):
@@ -67,6 +68,8 @@ class ActivityUpdate(BaseModel):
 
 class ActivityOut(ActivityCreate):
     id: int
+    average_rating: Optional[float] = None
+    review_count: Optional[int] = 0
     
     class Config:
         from_attributes = True
@@ -77,3 +80,40 @@ class ActivityCompletionResult(BaseModel):
     leveled_up: bool
     newly_unlocked_badges: list
     total_badges: List[str]
+
+# Category Schemas
+class CategoryCreate(BaseModel):
+    name: str
+    emoji: str = "📍"
+    color: str = "#4CAF50"
+
+class CategoryUpdate(BaseModel):
+    name: Optional[str] = None
+    emoji: Optional[str] = None
+    color: Optional[str] = None
+
+class CategoryOut(BaseModel):
+    id: int
+    name: str
+    emoji: str
+    color: str
+
+    class Config:
+        from_attributes = True
+
+# Review Schemas
+class ReviewCreate(BaseModel):
+    rating: int  # 1-5
+    comment: Optional[str] = None
+
+class ReviewOut(BaseModel):
+    id: int
+    user_id: int
+    activity_id: int
+    rating: int
+    comment: Optional[str]
+    created_at: datetime
+    username: Optional[str] = None  # populated by join
+
+    class Config:
+        from_attributes = True
