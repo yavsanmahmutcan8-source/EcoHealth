@@ -74,11 +74,11 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Develop the localized discovery endpoint: Filter activities dynamically based on the user's provided latitude, longitude, and map zoom radius.
 
 **Phase 7: Dynamic Categories & Ratings/Comments Engine**
-- [ ] **Category System**: Create a `Category` database model with fields: `id`, `name`, `emoji`, `color`. Add Alembic migration. Update `Activity.category` to be a foreign key to the `Category` table.
-- [ ] **Admin Category CRUD**: Build REST endpoints (`POST /api/admin/categories`, `GET /api/categories`, `PUT`, `DELETE`) to let admins create/edit/delete categories with custom emojis. Seed initial categories (Hiking 🥾, Running 🏃, Cycling 🚵, Walking 🚶).
-- [ ] **Review & Rating Model**: Create `Review` database model with fields: `id`, `user_id` (FK), `activity_id` (FK), `rating` (1-5 stars), `comment` (text), `created_at`. Add unique constraint on `(user_id, activity_id)` so each user can only review once per activity.
-- [ ] **Review REST API**: Build endpoints: `POST /api/activities/{id}/reviews`, `GET /api/activities/{id}/reviews?sort=rating|date&order=asc|desc`, `DELETE /api/reviews/{id}`. Calculate and cache aggregate `average_rating` and `review_count` on the Activity model.
-- [ ] **Activity Schema Update**: Add `average_rating` and `review_count` fields to `ActivityOut` so frontend can display ratings on cards without extra API calls.
+- [x] **Category System**: Create a `Category` database model with fields: `id`, `name`, `emoji`, `color`. Add Alembic migration. Update `Activity.category` to be a foreign key to the `Category` table.
+- [x] **Admin Category CRUD**: Build REST endpoints (`POST /api/admin/categories`, `GET /api/categories`, `PUT`, `DELETE`) to let admins create/edit/delete categories with custom emojis. Seed initial categories (Hiking 🥾, Running 🏃, Cycling 🚵, Walking 🚶).
+- [x] **Review & Rating Model**: Create `Review` database model with fields: `id`, `user_id` (FK), `activity_id` (FK), `rating` (1-5 stars), `comment` (text), `created_at`. Add unique constraint on `(user_id, activity_id)` so each user can only review once per activity.
+- [x] **Review REST API**: Build endpoints: `POST /api/activities/{id}/reviews`, `GET /api/activities/{id}/reviews?sort=rating|date&order=asc|desc`, `DELETE /api/reviews/{id}`. Calculate and cache aggregate `average_rating` and `review_count` on the Activity model.
+- [x] **Activity Schema Update**: Add `average_rating` and `review_count` fields to `ActivityOut` so frontend can display ratings on cards without extra API calls.
 
 ---
 
@@ -114,12 +114,12 @@ To ensure consistency across the team, all implementations MUST use the followin
 - [x] Implement localized User Discovery: Auto-request browser Geolocation, focus the default Map View to the user's city/neighborhood, and silently reload local activities as the user pans the map.
 
 **Phase 6: Dynamic Categories UI & Ratings/Comments (New)**
-- [ ] **Admin Category Manager**: Build a new tab in the Admin Portal with a form to create categories (name + emoji picker). Display existing categories in an editable list with delete option. Wire to backend `GET/POST/PUT/DELETE /api/admin/categories`.
-- [ ] **Dynamic Category Usage**: Replace all hardcoded category `<select>` dropdowns (Admin Route Builder, Explore filter) with dynamically fetched categories from the API. Replace hardcoded emoji mappings with the category's stored emoji.
-- [ ] **Star Rating Component**: Build a reusable `<StarRating>` component (1-5 interactive stars with half-star hover preview, gold fill animation). Use it for both submitting and displaying ratings.
-- [ ] **Activity Comments Section**: Below each activity preview modal, add a collapsible "Reviews" section. Show the aggregate star average + count at the top. List individual reviews with username, star rating, comment text, and date.
-- [ ] **Comment Submission Form**: Add a form inside the activity modal for logged-in users to write a review (star rating + text comment). Show a "You already reviewed this" state if the user has already submitted a review.
-- [ ] **Comment Sorting UI**: Add sort controls (dropdown or toggle buttons) above the comments list: sort by "Highest Rated", "Lowest Rated", "Newest First", "Oldest First". Fetch sorted results from the backend API.
+- [x] **Admin Category Manager**: Build a new tab in the Admin Portal with a form to create categories (name + emoji picker). Display existing categories in an editable list with delete option. Wire to backend `GET/POST/PUT/DELETE /api/admin/categories`.
+- [x] **Dynamic Category Usage**: Replace all hardcoded category `<select>` dropdowns (Admin Route Builder, Explore filter) with dynamically fetched categories from the API. Replace hardcoded emoji mappings with the category's stored emoji.
+- [x] **Star Rating Component**: Build a reusable `<StarRating>` component (1-5 interactive stars with half-star hover preview, gold fill animation). Use it for both submitting and displaying ratings.
+- [x] **Activity Comments Section**: Below each activity preview modal, add a collapsible "Reviews" section. Show the aggregate star average + count at the top. List individual reviews with username, star rating, comment text, and date.
+- [x] **Comment Submission Form**: Add a form inside the activity modal for logged-in users to write a review (star rating + text comment). Show a "You already reviewed this" state if the user has already submitted a review.
+- [x] **Comment Sorting UI**: Add sort controls (dropdown or toggle buttons) above the comments list: sort by "Highest Rated", "Lowest Rated", "Newest First", "Oldest First". Fetch sorted results from the backend API.
 
 ---
 
