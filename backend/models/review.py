@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from db.base_class import Base
 
 
@@ -10,6 +11,9 @@ class Review(Base):
     rating = Column(Integer, nullable=False)  # 1 to 5
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user = relationship("User", back_populates="reviews")
+    activity = relationship("Activity")
 
     __table_args__ = (
         UniqueConstraint("user_id", "activity_id", name="uq_user_activity_review"),
