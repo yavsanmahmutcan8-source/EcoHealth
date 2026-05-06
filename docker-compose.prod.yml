@@ -36,6 +36,8 @@ services:
     depends_on:
       - db
       - redis
+    volumes:
+      - backend_static_prod:/app/static
     networks:
       - ecohealth_network
 
@@ -62,3 +64,4 @@ networks:
 volumes:
   postgres_data_prod:
   redis_data_prod:
+  backend_static_prod:
