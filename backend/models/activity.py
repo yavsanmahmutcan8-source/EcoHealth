@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, Text, Boolean, ForeignKey
+from sqlalchemy.orm import relationship
 from geoalchemy2 import Geography
 from db.base_class import Base
 
@@ -10,6 +11,9 @@ class Activity(Base):
     
     # Geolocation bounds (advanced spatial support)
     location = Column(Geography('POINT', srid=4326), nullable=True)
+    
+    creator_id = Column(Integer, ForeignKey("user.id"), nullable=True)
+    creator = relationship("User", back_populates="activities")
     
     # Advanced Map Data
     route_polyline = Column(Text, nullable=True) # Encoded polyline string
