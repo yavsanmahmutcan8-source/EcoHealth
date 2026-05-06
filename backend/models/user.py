@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, JSON
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, Text
 from db.base_class import Base
 
 class User(Base):
@@ -13,11 +13,17 @@ class User(Base):
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
     
+    # Profile customization
+    display_name = Column(String, nullable=True)
+    bio = Column(Text, nullable=True)
+    avatar_url = Column(String, nullable=True)
+    
     # Gamification
     xp = Column(Integer, default=0)
     level = Column(Integer, default=1)
     badges = Column(JSON, default=list)
     completed_activities_count = Column(Integer, default=0)
+    total_distance_km = Column(Float, default=0)
 
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)

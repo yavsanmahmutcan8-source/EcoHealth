@@ -20,6 +20,12 @@ app.add_middleware(
 from api.routes import router as api_router
 app.include_router(api_router, prefix="/api")
 
+# Serve uploaded files (avatars, etc.)
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("/app/static/avatars", exist_ok=True)
+app.mount("/static", StaticFiles(directory="/app/static"), name="static")
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "app": settings.PROJECT_NAME}

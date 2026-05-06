@@ -1,25 +1,31 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func as sa_func
 from typing import List, Optional
 import requests
+import os
+import shutil
 from pydantic import BaseModel
 from db.session import get_db
 from models.user import User
 from models.activity import Activity
 from models.category import Category
 from models.review import Review
+from models.badge_definition import BadgeDefinition
+from models.completion_log import CompletionLog
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
 from api.schemas import (
     UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
     ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
-    ReviewCreate, ReviewOut
+    ReviewCreate, ReviewOut, ProfileUpdate,
+    BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut
 )
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
+from services.badge_evaluator import evaluate_badges, get_badge_progress
 
 router = APIRouter()
 
@@ -223,25 +229,66 @@ async def complete_activity(
     # 2. Increment user completion count
     current_user.completed_activities_count += 1
     
-    # 3. Process gamification
+    # 3. Process XP + level gamification
     calc_result = process_activity_completion(
         user_xp=current_user.xp,
         user_level=current_user.level,
-        user_badges=current_user.badges,
+        user_badges=current_user.badges or [],
         total_activities=current_user.completed_activities_count,
         activity_xp_reward=activity.xp_reward
     )
     
-    # 4. Save progress to DB
+    # 4. Save XP/level progress to DB
     current_user.xp = calc_result["new_xp"]
     current_user.level = calc_result["new_level"]
-    current_user.badges = calc_result["total_badges"]
+    
+    # 5. Create CompletionLog entry for badge evaluator
+    log_entry = CompletionLog(
+        user_id=current_user.id,
+        activity_id=activity_id,
+        category=activity.category or "Unknown"
+    )
+    db.add(log_entry)
+    await db.flush()  # Flush so the log is visible to queries
+    
+    # 6. Run smart badge evaluator
+    completions_result = await db.execute(
+        select(CompletionLog).where(CompletionLog.user_id == current_user.id)
+    )
+    all_completions = completions_result.scalars().all()
+    
+    review_count_result = await db.execute(
+        select(sa_func.count(Review.id)).where(Review.user_id == current_user.id)
+    )
+    review_count = review_count_result.scalar() or 0
+    
+    badge_defs_result = await db.execute(select(BadgeDefinition))
+    badge_defs = badge_defs_result.scalars().all()
+    
+    new_badges = evaluate_badges(
+        user_xp=current_user.xp,
+        user_level=current_user.level,
+        owned_badge_ids=current_user.badges or [],
+        completions=all_completions,
+        review_count=review_count,
+        badge_definitions=badge_defs
+    )
+    
+    # 7. Merge badges: old gamification badges + new smart badges
+    all_badge_ids = list(set((current_user.badges or []) + [b["id"] for b in new_badges]))
+    current_user.badges = all_badge_ids
     
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
     
-    return calc_result
+    return {
+        "new_xp": calc_result["new_xp"],
+        "new_level": calc_result["new_level"],
+        "leveled_up": calc_result["leveled_up"],
+        "newly_unlocked_badges": calc_result["newly_unlocked_badges"] + new_badges,
+        "total_badges": all_badge_ids
+    }
 
 @router.put("/admin/users/{user_id}", response_model=UserOut)
 async def admin_update_user(
@@ -365,6 +412,31 @@ async def create_review(
     await db.commit()
     await db.refresh(new_review)
     
+    # Badge hook: check FIRST_REVIEW badge
+    review_count_result = await db.execute(
+        select(sa_func.count(Review.id)).where(Review.user_id == current_user.id)
+    )
+    review_count = review_count_result.scalar() or 0
+    if review_count == 1:  # First review ever — evaluate badges
+        completions_result = await db.execute(
+            select(CompletionLog).where(CompletionLog.user_id == current_user.id)
+        )
+        all_completions = completions_result.scalars().all()
+        badge_defs_result = await db.execute(select(BadgeDefinition))
+        badge_defs = badge_defs_result.scalars().all()
+        new_badges = evaluate_badges(
+            user_xp=current_user.xp,
+            user_level=current_user.level,
+            owned_badge_ids=current_user.badges or [],
+            completions=all_completions,
+            review_count=review_count,
+            badge_definitions=badge_defs
+        )
+        if new_badges:
+            current_user.badges = list(set((current_user.badges or []) + [b["id"] for b in new_badges]))
+            db.add(current_user)
+            await db.commit()
+    
     return ReviewOut(
         id=new_review.id,
         user_id=new_review.user_id,
@@ -445,3 +517,147 @@ async def get_activity_rating(
         "average_rating": round(float(row.average_rating), 1) if row.average_rating else None,
         "review_count": row.review_count or 0
     }
+
+# =============================================
+# BADGE ENDPOINTS
+# =============================================
+
+@router.get("/badges", response_model=List[BadgeDefinitionOut])
+async def get_badges(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(BadgeDefinition))
+    return result.scalars().all()
+
+@router.post("/admin/badges", response_model=BadgeDefinitionOut)
+async def create_badge(
+    badge_in: BadgeDefinitionCreate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    existing = await db.execute(select(BadgeDefinition).where(BadgeDefinition.id == badge_in.id))
+    if existing.scalars().first():
+        raise HTTPException(status_code=400, detail="Badge with this ID already exists")
+    new_badge = BadgeDefinition(**badge_in.dict())
+    db.add(new_badge)
+    await db.commit()
+    await db.refresh(new_badge)
+    return new_badge
+
+@router.put("/admin/badges/{badge_id}", response_model=BadgeDefinitionOut)
+async def update_badge(
+    badge_id: str,
+    badge_in: BadgeDefinitionUpdate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(BadgeDefinition).where(BadgeDefinition.id == badge_id))
+    badge = result.scalars().first()
+    if not badge:
+        raise HTTPException(status_code=404, detail="Badge not found")
+    update_data = badge_in.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(badge, key, value)
+    await db.commit()
+    await db.refresh(badge)
+    return badge
+
+@router.delete("/admin/badges/{badge_id}")
+async def delete_badge(
+    badge_id: str,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(BadgeDefinition).where(BadgeDefinition.id == badge_id))
+    badge = result.scalars().first()
+    if not badge:
+        raise HTTPException(status_code=404, detail="Badge not found")
+    await db.delete(badge)
+    await db.commit()
+    return {"message": "Badge deleted successfully"}
+
+# =============================================
+# BADGE PROGRESS ENDPOINT
+# =============================================
+
+@router.get("/users/me/badge-progress")
+async def get_my_badge_progress(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    completions_result = await db.execute(
+        select(CompletionLog).where(CompletionLog.user_id == current_user.id)
+    )
+    completions = completions_result.scalars().all()
+    
+    review_count_result = await db.execute(
+        select(sa_func.count(Review.id)).where(Review.user_id == current_user.id)
+    )
+    review_count = review_count_result.scalar() or 0
+    
+    badge_defs_result = await db.execute(select(BadgeDefinition))
+    badge_defs = badge_defs_result.scalars().all()
+    
+    progress = get_badge_progress(
+        user_xp=current_user.xp,
+        user_level=current_user.level,
+        completions=completions,
+        review_count=review_count,
+        badge_definitions=badge_defs
+    )
+    
+    return progress
+
+# =============================================
+# PROFILE ENDPOINTS
+# =============================================
+
+@router.put("/users/me/profile", response_model=UserOut)
+async def update_my_profile(
+    profile_in: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    if profile_in.username and profile_in.username != current_user.username:
+        existing = await db.execute(select(User).where(User.username == profile_in.username))
+        if existing.scalars().first():
+            raise HTTPException(status_code=400, detail="Username already taken")
+        current_user.username = profile_in.username
+    
+    if profile_in.display_name is not None:
+        current_user.display_name = profile_in.display_name
+    if profile_in.bio is not None:
+        current_user.bio = profile_in.bio
+    
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user
+
+AVATAR_DIR = "/app/static/avatars"
+
+@router.post("/users/me/avatar", response_model=UserOut)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    # Validate file
+    if file.content_type not in ("image/jpeg", "image/png", "image/webp"):
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, or WebP images are allowed")
+    
+    contents = await file.read()
+    if len(contents) > 2 * 1024 * 1024:  # 2MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 2MB)")
+    
+    os.makedirs(AVATAR_DIR, exist_ok=True)
+    ext = file.filename.rsplit('.', 1)[-1] if '.' in file.filename else 'jpg'
+    filename = f"{current_user.id}.{ext}"
+    filepath = os.path.join(AVATAR_DIR, filename)
+    
+    with open(filepath, "wb") as f:
+        f.write(contents)
+    
+    current_user.avatar_url = f"/static/avatars/{filename}"
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user

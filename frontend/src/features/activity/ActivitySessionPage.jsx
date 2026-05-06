@@ -4,6 +4,7 @@ import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
+import { BadgeUnlockToast } from '../../components/ui/BadgeUnlockToast';
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -55,6 +56,8 @@ export function ActivitySessionPage() {
 
   const [completionResult, setCompletionResult] = useState(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  const [showBadgeToast, setShowBadgeToast] = useState(false);
+  const [newBadges, setNewBadges] = useState([]);
   const [showAbandonConfirm, setShowAbandonConfirm] = useState(false);
   const [followUser, setFollowUser] = useState(true);
   const watchIdRef = useRef(null);
@@ -140,6 +143,11 @@ export function ActivitySessionPage() {
       const data = await res.json();
       setCompletionResult(data);
       setShowCelebration(true);
+      // Show badge unlock toast if there are new badges
+      if (data.newly_unlocked_badges && data.newly_unlocked_badges.length > 0) {
+        setNewBadges(data.newly_unlocked_badges);
+        setShowBadgeToast(true);
+      }
       await fetchUser();
     } catch (err) {
       addToast(err.message || 'Error completing activity', 'error');
@@ -391,7 +399,7 @@ export function ActivitySessionPage() {
                 <h4>🏅 New Badges Unlocked!</h4>
                 {completionResult.newly_unlocked_badges.map(badge => (
                   <div key={badge.id} className={styles.badgeRevealItem}>
-                    <span className={styles.badgeEmoji}>🏅</span>
+                    <span className={styles.badgeEmoji}>{badge.emoji || '🏅'}</span>
                     <div>
                       <strong>{badge.name}</strong>
                       <small>{badge.description}</small>
@@ -407,6 +415,14 @@ export function ActivitySessionPage() {
           </div>
         )}
       </Modal>
+
+      {/* Badge unlock celebration overlay */}
+      {showBadgeToast && (
+        <BadgeUnlockToast 
+          badges={newBadges} 
+          onDismiss={() => setShowBadgeToast(false)} 
+        />
+      )}
     </div>
   );
 }

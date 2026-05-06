@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 # Token Schemas
@@ -28,9 +28,18 @@ class UserOut(BaseModel):
     level: int
     badges: List[str]
     is_admin: bool = False
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    total_distance_km: Optional[float] = 0
 
     class Config:
         from_attributes = True
+
+class ProfileUpdate(BaseModel):
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    username: Optional[str] = None
 
 class AdminUserUpdate(BaseModel):
     xp: Optional[int] = None
@@ -114,6 +123,36 @@ class ReviewOut(BaseModel):
     comment: Optional[str]
     created_at: datetime
     username: Optional[str] = None  # populated by join
+
+    class Config:
+        from_attributes = True
+
+# Badge Definition Schemas
+class BadgeDefinitionCreate(BaseModel):
+    id: str
+    name: str
+    description: str
+    emoji: str = "🏆"
+    color: str = "#FFB300"
+    condition_type: str
+    condition_config: Dict[str, Any] = {}
+
+class BadgeDefinitionUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    emoji: Optional[str] = None
+    color: Optional[str] = None
+    condition_type: Optional[str] = None
+    condition_config: Optional[Dict[str, Any]] = None
+
+class BadgeDefinitionOut(BaseModel):
+    id: str
+    name: str
+    description: str
+    emoji: str
+    color: str
+    condition_type: str
+    condition_config: Dict[str, Any]
 
     class Config:
         from_attributes = True

@@ -39,7 +39,11 @@ export function Navbar() {
           <Bell size={20} />
         </button>
         <div className={styles.avatar} onClick={handleProfileClick} title="View Profile">
-          <User size={20} />
+          {user?.avatar_url ? (
+            <img src={user.avatar_url} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : (
+            <User size={20} />
+          )}
         </div>
       </div>
     </nav>

@@ -99,6 +99,9 @@ export const useAuthStore = create(
             level: rawUser.level || 1,
             xp: rawUser.xp || 0,
             max_xp: rawUser.level ? (rawUser.level) * 200 : 100,
+            display_name: rawUser.display_name || null,
+            bio: rawUser.bio || null,
+            avatar_url: rawUser.avatar_url || null,
             stats: {
               trails: 0,
               distance: 0,
