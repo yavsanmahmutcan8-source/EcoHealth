@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from db.session import Base
+from db.base_class import Base
 import enum
 
 class NotificationType(str, enum.Enum):
