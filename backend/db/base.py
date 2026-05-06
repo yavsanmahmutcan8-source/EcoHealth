@@ -7,3 +7,4 @@ from models.category import Category
 from models.review import Review
 from models.badge_definition import BadgeDefinition
 from models.completion_log import CompletionLog
+from models.notification import Notification

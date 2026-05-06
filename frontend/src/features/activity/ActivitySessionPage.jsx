@@ -11,6 +11,7 @@ import L from 'leaflet';
 import { useActivitySessionStore } from '../../store/activitySessionStore';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
+import { useNotificationStore } from '../../store/notificationStore';
 import { MapPin, Timer, Route, Trophy, Star, ChevronUp, X, Footprints, Flag } from 'lucide-react';
 import styles from './ActivitySessionPage.module.css';
 
@@ -149,6 +150,7 @@ export function ActivitySessionPage() {
         setShowBadgeToast(true);
       }
       await fetchUser();
+      await useNotificationStore.getState().fetchNotifications(token);
     } catch (err) {
       addToast(err.message || 'Error completing activity', 'error');
     }

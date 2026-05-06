@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, Text
+from sqlalchemy.orm import relationship
 from db.base_class import Base
 
 class User(Base):
@@ -27,3 +28,7 @@ class User(Base):
 
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    
+    activities = relationship("Activity", back_populates="creator")
+    reviews = relationship("Review", back_populates="user")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

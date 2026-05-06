@@ -15,13 +15,14 @@ from models.category import Category
 from models.review import Review
 from models.badge_definition import BadgeDefinition
 from models.completion_log import CompletionLog
+from models.notification import Notification, NotificationType
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
 from api.schemas import (
     UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
     ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
     ReviewCreate, ReviewOut, ProfileUpdate,
-    BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut
+    BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut, NotificationOut
 )
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
@@ -278,6 +279,25 @@ async def complete_activity(
     all_badge_ids = list(set((current_user.badges or []) + [b["id"] for b in new_badges]))
     current_user.badges = all_badge_ids
     
+    # 8. Create Notifications
+    if calc_result["leveled_up"]:
+        notif = Notification(
+            user_id=current_user.id,
+            type=NotificationType.LEVEL_UP,
+            title="Level Up!",
+            message=f"Congratulations! You reached Level {calc_result['new_level']}!"
+        )
+        db.add(notif)
+        
+    for b in new_badges:
+        notif = Notification(
+            user_id=current_user.id,
+            type=NotificationType.BADGE_EARNED,
+            title="Badge Earned!",
+            message=f"You earned the '{b['name']}' badge!"
+        )
+        db.add(notif)
+    
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
@@ -435,6 +455,16 @@ async def create_review(
         if new_badges:
             current_user.badges = list(set((current_user.badges or []) + [b["id"] for b in new_badges]))
             db.add(current_user)
+            
+            for b in new_badges:
+                notif = Notification(
+                    user_id=current_user.id,
+                    type=NotificationType.BADGE_EARNED,
+                    title="Badge Earned!",
+                    message=f"You earned the '{b['name']}' badge!"
+                )
+                db.add(notif)
+                
             await db.commit()
     
     return ReviewOut(
@@ -661,3 +691,54 @@ async def upload_avatar(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+# =============================================
+# NOTIFICATION ENDPOINTS
+# =============================================
+
+@router.get("/notifications", response_model=List[NotificationOut])
+async def get_my_notifications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .limit(50)
+    )
+    return result.scalars().all()
+
+@router.put("/notifications/read-all")
+async def mark_all_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(
+        select(Notification)
+        .where(Notification.user_id == current_user.id, Notification.is_read == False)
+    )
+    unread = result.scalars().all()
+    for notif in unread:
+        notif.is_read = True
+    await db.commit()
+    return {"message": "All marked as read"}
+
+@router.put("/notifications/{notif_id}/read", response_model=NotificationOut)
+async def mark_notification_read(
+    notif_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    result = await db.execute(select(Notification).where(Notification.id == notif_id))
+    notif = result.scalars().first()
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    if notif.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    notif.is_read = True
+    await db.commit()
+    await db.refresh(notif)
+    return notif
+

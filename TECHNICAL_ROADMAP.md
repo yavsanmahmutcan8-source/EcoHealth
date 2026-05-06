@@ -127,15 +127,15 @@ To ensure consistency across the team, all implementations MUST use the followin
 
 ### 8A. Content Population: More Categories & Badges
 
-- [ ] **Seed Additional Categories**: Add at least 10 new categories beyond the initial 4. Examples: Swimming 🏊, Yoga 🧘, Rock Climbing 🧗, Kayaking 🛶, Skateboarding 🛹, Skiing ⛷️, Trail Running 🏃‍♂️, Nature Walk 🌿, Bird Watching 🐦, Gardening 🌱. Create via a one-time seed script on the server.
+- [x] **Seed Additional Categories**: Add at least 10 new categories beyond the initial 4. Examples: Swimming 🏊, Yoga 🧘, Rock Climbing 🧗, Kayaking 🛶, Skateboarding 🛹, Skiing ⛷️, Trail Running 🏃‍♂️, Nature Walk 🌿, Bird Watching 🐦, Gardening 🌱. Create via a one-time seed script on the server.
 
-- [ ] **Badge Definition Table**: Create a `BadgeDefinition` database model to replace the hardcoded `AVAILABLE_BADGES` list:
+- [x] **Badge Definition Table**: Create a `BadgeDefinition` database model to replace the hardcoded `AVAILABLE_BADGES` list:
   - Fields: `id` (str, PK like `"weekend_warrior"`), `name`, `description`, `emoji`, `color`, `condition_type` (enum), `condition_config` (JSON).
   - `condition_type` is an enum: `ACTIVITY_COUNT`, `TOTAL_XP`, `LEVEL_REACHED`, `CATEGORY_COUNT`, `STREAK_DAYS`, `TIME_OF_DAY`, `WEEKEND_COUNT`, `TOTAL_DISTANCE`, `FIRST_REVIEW`, `MULTI_CATEGORY`.
   - `condition_config` stores the parameters as JSON, e.g. `{"count": 3}` for WEEKEND_COUNT, `{"before_hour": 7}` for TIME_OF_DAY, `{"category": "Hiking", "count": 5}` for CATEGORY_COUNT.
   - Add Alembic migration. Seed 15–20 badges into the table (see badge list below).
 
-- [ ] **Badge Seed Data** — Populate the `BadgeDefinition` table with these achievements:
+- [x] **Badge Seed Data** — Populate the `BadgeDefinition` table with these achievements:
 
   | ID | Name | Description | Condition Type | Config |
   |----|------|-------------|---------------|--------|
@@ -157,13 +157,13 @@ To ensure consistency across the team, all implementations MUST use the followin
   | `streak_3` | On Fire | Complete activities 3 days in a row | STREAK_DAYS | `{"days": 3}` |
   | `streak_7` | Unstoppable | Complete activities 7 days in a row | STREAK_DAYS | `{"days": 7}` |
 
-- [ ] **Admin Badge Management API**: `GET /api/badges` (list all badge definitions, public). `POST/PUT/DELETE /api/admin/badges` for admin CRUD.
+- [x] **Admin Badge Management API**: `GET /api/badges` (list all badge definitions, public). `POST/PUT/DELETE /api/admin/badges` for admin CRUD.
 
 ### 8B. Smart Badge Achievement Engine
 
-- [ ] **ActivityCompletion Log Table**: Create a `CompletionLog` model: `id`, `user_id` (FK), `activity_id` (FK), `category` (str — snapshot at completion time), `completed_at` (datetime with timezone). This is the **history table** that powers all badge condition evaluations.
+- [x] **ActivityCompletion Log Table**: Create a `CompletionLog` model: `id`, `user_id` (FK), `activity_id` (FK), `category` (str — snapshot at completion time), `completed_at` (datetime with timezone). This is the **history table** that powers all badge condition evaluations.
 
-- [ ] **Badge Evaluator Service** (`services/badge_evaluator.py`): A stateless function `evaluate_badges(user, db) -> List[BadgeDefinition]` that:
+- [x] **Badge Evaluator Service** (`services/badge_evaluator.py`): A stateless function `evaluate_badges(user, db) -> List[BadgeDefinition]` that:
   1. Loads all `BadgeDefinition` rows from the DB.
   2. Loads the user's `CompletionLog` entries.
   3. Loads the user's current badge list.
@@ -179,28 +179,28 @@ To ensure consistency across the team, all implementations MUST use the followin
      - `FIRST_REVIEW`: `SELECT COUNT(*) FROM review WHERE user_id = user.id` >= 1
   5. Returns the list of newly earned `BadgeDefinition` objects.
 
-- [ ] **Hook into Activity Completion**: Update `POST /api/activities/{id}/complete` to:
+- [x] **Hook into Activity Completion**: Update `POST /api/activities/{id}/complete` to:
   1. Create a `CompletionLog` entry (with category snapshot + timestamp).
   2. Call `evaluate_badges(user, db)`.
   3. Persist any newly earned badges to `user.badges`.
   4. Return the list of newly unlocked badges in the response (for celebration animation).
 
-- [ ] **Hook into Review Submission**: After a user submits their first review (`POST /api/activities/{id}/reviews`), also call `evaluate_badges()` to check the `FIRST_REVIEW` badge.
+- [x] **Hook into Review Submission**: After a user submits their first review (`POST /api/activities/{id}/reviews`), also call `evaluate_badges()` to check the `FIRST_REVIEW` badge.
 
 ### 8C. User Profile Customization
 
-- [ ] **User Model Update**: Add columns to `User`:
+- [x] **User Model Update**: Add columns to `User`:
   - `display_name` (String, nullable) — optional custom display name, falls back to `username`
   - `bio` (Text, nullable) — short bio/tagline
   - `avatar_url` (String, nullable) — URL/path to uploaded profile photo
   - `total_distance_km` (Float, default=0) — cumulative distance (for future badge conditions)
   - Add Alembic migration.
 
-- [ ] **Profile Update API**: `PUT /api/users/me/profile` — allows updating `display_name`, `bio`, `username` (with uniqueness check). Authenticated users only.
+- [x] **Profile Update API**: `PUT /api/users/me/profile` — allows updating `display_name`, `bio`, `username` (with uniqueness check). Authenticated users only.
 
-- [ ] **Avatar Upload API**: `POST /api/users/me/avatar` — accepts multipart file upload (JPEG/PNG, max 2MB). Store in `static/avatars/{user_id}.jpg` on the server. Serve via Nginx at `/static/avatars/`. Update `user.avatar_url` to the served path.
+- [x] **Avatar Upload API**: `POST /api/users/me/avatar` — accepts multipart file upload (JPEG/PNG, max 2MB). Store in `static/avatars/{user_id}.jpg` on the server. Serve via Nginx at `/static/avatars/`. Update `user.avatar_url` to the served path.
 
-- [ ] **Update UserOut Schema**: Add `display_name`, `bio`, `avatar_url`, and `total_distance_km` fields to `UserOut` so the frontend can consume them.
+- [x] **Update UserOut Schema**: Add `display_name`, `bio`, `avatar_url`, and `total_distance_km` fields to `UserOut` so the frontend can consume them.
 
 ---
 
@@ -208,39 +208,65 @@ To ensure consistency across the team, all implementations MUST use the followin
 
 ### 7A. Profile Customization UI
 
-- [ ] **Profile Editor Modal**: Add an "Edit Profile" button on the Profile page. Opens a modal with:
+- [x] **Profile Editor Modal**: Add an "Edit Profile" button on the Profile page. Opens a modal with:
   - Avatar upload (click-to-select image, preview before upload, circular crop preview)
   - Display name field
   - Username field (with "taken" validation on blur)
   - Bio textarea (max 160 characters, character counter)
   - Save button that calls `PUT /api/users/me/profile` and `POST /api/users/me/avatar`
 
-- [ ] **Avatar Display Everywhere**: Replace the generic `<User>` icon with the actual avatar image across: Profile page header, Navbar avatar circle, Review cards (reviewer avatar). Fallback to initial letter or icon if no avatar set.
+- [x] **Avatar Display Everywhere**: Replace the generic `<User>` icon with the actual avatar image across: Profile page header, Navbar avatar circle, Review cards (reviewer avatar). Fallback to initial letter or icon if no avatar set.
 
-- [ ] **Update authStore**: Add `avatar_url`, `display_name`, `bio` to the `formattedUser` mapping. After profile update, re-fetch user data.
+- [x] **Update authStore**: Add `avatar_url`, `display_name`, `bio` to the `formattedUser` mapping. After profile update, re-fetch user data.
 
 ### 7B. Real Badge Gallery
 
-- [ ] **Fetch Badge Definitions**: On Profile page mount, `GET /api/badges` to load all available badges with their names, descriptions, emojis, and colors. Cross-reference with `user.badges` (list of earned badge IDs) to determine locked/unlocked state.
+- [x] **Fetch Badge Definitions**: On Profile page mount, `GET /api/badges` to load all available badges with their names, descriptions, emojis, and colors. Cross-reference with `user.badges` (list of earned badge IDs) to determine locked/unlocked state.
 
-- [ ] **Dynamic Badge Cards**: Replace the `MOCK_BADGES` array with real data. Render each badge with:
+- [x] **Dynamic Badge Cards**: Replace the `MOCK_BADGES` array with real data. Render each badge with:
   - Emoji as the icon (from `BadgeDefinition.emoji`)
   - Color background (from `BadgeDefinition.color`)
   - Locked state: grayscale + reduced opacity + "🔒 Locked" label
   - Unlocked state: full color + subtle glow animation
   - Progress hint: For count-based badges, show "2/5 completed" below the description.
 
-- [ ] **Badge Progress Calculation**: For badges that are count-based (ACTIVITY_COUNT, CATEGORY_COUNT, WEEKEND_COUNT, STREAK_DAYS), the frontend should show progress. Add a `GET /api/users/me/badge-progress` endpoint that returns the current count for each badge condition, so the frontend can display "3/5 activities completed" etc.
+- [x] **Badge Progress Calculation**: For badges that are count-based (ACTIVITY_COUNT, CATEGORY_COUNT, WEEKEND_COUNT, STREAK_DAYS), the frontend should show progress. Add a `GET /api/users/me/badge-progress` endpoint that returns the current count for each badge condition, so the frontend can display "3/5 activities completed" etc.
 
 ### 7C. Achievement Celebration
 
-- [ ] **Badge Unlock Toast**: When the `/complete` endpoint returns `newly_unlocked_badges`, display a premium animated toast/overlay for each badge:
+- [x] **Badge Unlock Toast**: When the `/complete` endpoint returns `newly_unlocked_badges`, display a premium animated toast/overlay for each badge:
   - Badge emoji + name + description in a golden glowing card
   - Confetti burst animation
   - Slide-in from top with bounce effect
   - Auto-dismiss after 5 seconds or tap to close
 
-- [ ] **Badge Unlock in Session Page**: On the ActivitySessionPage's completion screen, display newly earned badges alongside the XP and level-up celebration that already exists.
+- [x] **Badge Unlock in Session Page**: On the ActivitySessionPage's completion screen, display newly earned badges alongside the XP and level-up celebration that already exists.
+
+---
+
+## Phase 9 — Notification System (Planned)
+
+### 9A. Backend: Notification Engine
+- [ ] **Notification Model**: Create `Notification` model with fields: `id`, `user_id` (FK), `type` (enum: `BADGE_EARNED`, `LEVEL_UP`, `NEW_ACTIVITY`, `SYSTEM`), `title`, `message`, `is_read` (boolean, default `False`), `created_at`.
+- [ ] **Notification Endpoints**:
+  - `GET /api/notifications`: Retrieve a user's notifications, sorted by newest first.
+  - `PUT /api/notifications/{id}/read`: Mark a specific notification as read.
+  - `PUT /api/notifications/read-all`: Mark all unread notifications as read.
+- [ ] **System Triggers**: 
+  - Hook into `evaluate_badges` to create `BADGE_EARNED` notifications.
+  - Hook into `process_activity_completion` to create `LEVEL_UP` notifications when `leveled_up` is true.
+  - (Optional) Admin trigger to send `SYSTEM` broadcasts to all users.
+
+### 9B. Frontend: Notification UI
+- [ ] **Notification Store** (`notificationStore.js`): State management for fetching notifications and keeping track of the unread count. Optionally set up short-polling (every 30s) or WebSockets for real-time updates.
+- [ ] **Navbar Bell Integration**:
+  - Add a red unread badge indicator to the `Bell` icon in the Navbar if `unreadCount > 0`.
+  - When the Bell icon is clicked, open a dropdown menu or slide-out panel showing the latest notifications.
+- [ ] **Notification Panel/Dropdown**:
+  - Render notification items with distinct icons based on `type` (e.g., 🏆 for badges, ⬆️ for level up).
+  - Unread notifications should have a subtle background highlight.
+  - Clicking a notification marks it as read via API and updates the local store.
+  - Include a "Mark all as read" button.
 
 ---
 
