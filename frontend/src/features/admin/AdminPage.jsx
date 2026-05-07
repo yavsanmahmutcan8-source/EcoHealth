@@ -181,11 +181,11 @@ export function AdminPage() {
               <div style={{ overflowX: 'auto' }}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>ID</th><th>Username</th><th>Email</th><th>Level</th><th>XP</th></tr>
+                    <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Level</th><th>XP</th></tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
-                      <tr key={u.id}><td>{u.id}</td><td>{u.username}</td><td>{u.email}</td><td>{u.level}</td><td>{u.xp}</td></tr>
+                      <tr key={u.id}><td>{u.id}</td><td>{u.username}</td><td>{u.email}</td><td><span style={{ padding: '2px 8px', borderRadius: '12px', background: u.is_admin ? '#4CAF50' : '#e0e0e0', color: u.is_admin ? '#fff' : '#333', fontSize: '0.8rem', fontWeight: u.is_admin ? 'bold' : 'normal' }}>{u.is_admin ? 'Admin' : 'User'}</span></td><td>{u.level}</td><td>{u.xp}</td></tr>
                     ))}
                   </tbody>
                 </table>
