@@ -81,7 +81,7 @@ export function AuthPage() {
             />
           )}
           <Input 
-            label="Email Address (Try 'testuser')" 
+            label="Email Address" 
             type="text" 
             placeholder="eco@example.com" 
             value={email}
