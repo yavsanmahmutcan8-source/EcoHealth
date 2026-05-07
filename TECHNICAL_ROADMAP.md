@@ -247,22 +247,22 @@ To ensure consistency across the team, all implementations MUST use the followin
 ## Phase 9 — Notification System (Planned)
 
 ### 9A. Backend: Notification Engine
-- [ ] **Notification Model**: Create `Notification` model with fields: `id`, `user_id` (FK), `type` (enum: `BADGE_EARNED`, `LEVEL_UP`, `NEW_ACTIVITY`, `SYSTEM`), `title`, `message`, `is_read` (boolean, default `False`), `created_at`.
-- [ ] **Notification Endpoints**:
+- [x] **Notification Model**: Create `Notification` model with fields: `id`, `user_id` (FK), `type` (enum: `BADGE_EARNED`, `LEVEL_UP`, `NEW_ACTIVITY`, `SYSTEM`), `title`, `message`, `is_read` (boolean, default `False`), `created_at`.
+- [x] **Notification Endpoints**:
   - `GET /api/notifications`: Retrieve a user's notifications, sorted by newest first.
   - `PUT /api/notifications/{id}/read`: Mark a specific notification as read.
   - `PUT /api/notifications/read-all`: Mark all unread notifications as read.
-- [ ] **System Triggers**: 
+- [x] **System Triggers**: 
   - Hook into `evaluate_badges` to create `BADGE_EARNED` notifications.
   - Hook into `process_activity_completion` to create `LEVEL_UP` notifications when `leveled_up` is true.
   - (Optional) Admin trigger to send `SYSTEM` broadcasts to all users.
 
 ### 9B. Frontend: Notification UI
-- [ ] **Notification Store** (`notificationStore.js`): State management for fetching notifications and keeping track of the unread count. Optionally set up short-polling (every 30s) or WebSockets for real-time updates.
-- [ ] **Navbar Bell Integration**:
+- [x] **Notification Store** (`notificationStore.js`): State management for fetching notifications and keeping track of the unread count. Optionally set up short-polling (every 30s) or WebSockets for real-time updates.
+- [x] **Navbar Bell Integration**:
   - Add a red unread badge indicator to the `Bell` icon in the Navbar if `unreadCount > 0`.
   - When the Bell icon is clicked, open a dropdown menu or slide-out panel showing the latest notifications.
-- [ ] **Notification Panel/Dropdown**:
+- [x] **Notification Panel/Dropdown**:
   - Render notification items with distinct icons based on `type` (e.g., 🏆 for badges, ⬆️ for level up).
   - Unread notifications should have a subtle background highlight.
   - Clicking a notification marks it as read via API and updates the local store.
