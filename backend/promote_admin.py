@@ -2,7 +2,7 @@ import asyncio
 import sys
 from sqlalchemy.future import select
 from db.session import async_session
-from models.user import User
+from db.base import User, Activity  # Ensure all models are loaded
 
 async def promote_user(username: str):
     async with async_session() as session:
