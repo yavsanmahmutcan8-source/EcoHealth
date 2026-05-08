@@ -14,3 +14,7 @@ build/
 
 # OS
 .DS_Store
+
+# Local Docs & Logs
+DEVELOPER_HANDOVER.md
+frontend/*.log
