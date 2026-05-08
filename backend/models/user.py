@@ -10,10 +10,15 @@ class User(Base):
     
     # Physical/Personal specs (used for AI match engine)
     age = Column(Integer, nullable=True)
-    sex = Column(String, nullable=True) 
+    sex = Column(String, nullable=True)
     weight_kg = Column(Float, nullable=True)
     height_cm = Column(Float, nullable=True)
-    
+    fitness_level = Column(String, nullable=True)  # beginner | intermediate | advanced | athlete
+
+    # Onboarding & interests
+    onboarding_complete = Column(Boolean, default=False, nullable=False, server_default="false")
+    favorite_categories = Column(JSON, default=list)
+
     # Profile customization
     display_name = Column(String, nullable=True)
     bio = Column(Text, nullable=True)
@@ -25,6 +30,9 @@ class User(Base):
     badges = Column(JSON, default=list)
     completed_activities_count = Column(Integer, default=0)
     total_distance_km = Column(Float, default=0)
+
+    # Creator metrics (Phase 12)
+    creator_completions_count = Column(Integer, default=0, server_default="0")
 
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)

@@ -52,7 +52,7 @@ export const useAuthStore = create(
       
       register: async (username, email, password) => {
         console.log('[Auth] Attempting to register via API:', username);
-        
+
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: {
@@ -69,9 +69,39 @@ export const useAuthStore = create(
           const errData = await response.json().catch(() => ({}));
           throw new Error(errData.detail || 'Registration failed');
         }
-        
+
         // Auto-login after registration
         await get().login(username, password);
+      },
+
+      updateProfile: async (payload) => {
+        const token = get().token;
+        if (!token) throw new Error('Not authenticated');
+        const response = await fetch('/api/users/me/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.detail || 'Failed to update profile');
+        }
+        await get().fetchUser();
+      },
+
+      updateInterests: async (favoriteCategories) => {
+        const token = get().token;
+        if (!token) throw new Error('Not authenticated');
+        const response = await fetch('/api/users/me/interests', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ favorite_categories: favoriteCategories }),
+        });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.detail || 'Failed to save interests');
+        }
+        await get().fetchUser();
       },
 
       fetchUser: async () => {
@@ -102,9 +132,18 @@ export const useAuthStore = create(
             display_name: rawUser.display_name || null,
             bio: rawUser.bio || null,
             avatar_url: rawUser.avatar_url || null,
+            // Health & fitness
+            age: rawUser.age ?? null,
+            sex: rawUser.sex || null,
+            weight_kg: rawUser.weight_kg ?? null,
+            height_cm: rawUser.height_cm ?? null,
+            fitness_level: rawUser.fitness_level || null,
+            // Onboarding & interests
+            onboarding_complete: !!rawUser.onboarding_complete,
+            favorite_categories: rawUser.favorite_categories || [],
             stats: {
               trails: 0,
-              distance: 0,
+              distance: rawUser.total_distance_km ?? 0,
               calories: '0',
               gold_badges: (rawUser.badges || []).length
             },

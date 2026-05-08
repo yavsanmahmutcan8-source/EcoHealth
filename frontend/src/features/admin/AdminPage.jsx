@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -35,6 +36,7 @@ function RouteBuilderMap({ points, setPoints }) {
 }
 
 export function AdminPage() {
+  const navigate = useNavigate();
   const token = useAuthStore(state => state.token);
   const addToast = useToastStore(state => state.addToast);
   const [users, setUsers] = useState([]);
@@ -185,7 +187,22 @@ export function AdminPage() {
                   </thead>
                   <tbody>
                     {users.map(u => (
-                      <tr key={u.id}><td>{u.id}</td><td>{u.username}</td><td>{u.email}</td><td><span style={{ padding: '2px 8px', borderRadius: '12px', background: u.is_admin ? '#4CAF50' : '#e0e0e0', color: u.is_admin ? '#fff' : '#333', fontSize: '0.8rem', fontWeight: u.is_admin ? 'bold' : 'normal' }}>{u.is_admin ? 'Admin' : 'User'}</span></td><td>{u.level}</td><td>{u.xp}</td></tr>
+                      <tr key={u.id}>
+                        <td>{u.id}</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/profile/${u.username}`)}
+                            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--color-primary)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                          >
+                            {u.username}
+                          </button>
+                        </td>
+                        <td>{u.email}</td>
+                        <td><span style={{ padding: '2px 8px', borderRadius: '12px', background: u.is_admin ? '#4CAF50' : '#e0e0e0', color: u.is_admin ? '#fff' : '#333', fontSize: '0.8rem', fontWeight: u.is_admin ? 'bold' : 'normal' }}>{u.is_admin ? 'Admin' : 'User'}</span></td>
+                        <td>{u.level}</td>
+                        <td>{u.xp}</td>
+                      </tr>
                     ))}
                   </tbody>
                 </table>

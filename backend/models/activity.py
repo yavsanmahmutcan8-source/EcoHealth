@@ -40,3 +40,15 @@ class Activity(Base):
         if self.location is not None:
             return to_shape(self.location).x
         return None
+
+    @property
+    def creator_username(self):
+        return self.creator.username if self.creator else None
+
+    @property
+    def creator_avatar_url(self):
+        return self.creator.avatar_url if self.creator else None
+
+    @property
+    def creator_is_admin(self):
+        return bool(self.creator.is_admin) if self.creator else None

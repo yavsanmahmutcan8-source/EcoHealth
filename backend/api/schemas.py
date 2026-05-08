@@ -16,14 +16,20 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     age: Optional[int] = None
+    sex: Optional[str] = None
     weight_kg: Optional[float] = None
     height_cm: Optional[float] = None
+    fitness_level: Optional[str] = None
 
 class UserOut(BaseModel):
     id: int
     username: str
     email: str
-    age: Optional[int]
+    age: Optional[int] = None
+    sex: Optional[str] = None
+    weight_kg: Optional[float] = None
+    height_cm: Optional[float] = None
+    fitness_level: Optional[str] = None
     xp: int
     level: int
     badges: List[str]
@@ -32,6 +38,8 @@ class UserOut(BaseModel):
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     total_distance_km: Optional[float] = 0
+    onboarding_complete: bool = False
+    favorite_categories: Optional[List[str]] = []
 
     class Config:
         from_attributes = True
@@ -40,6 +48,44 @@ class ProfileUpdate(BaseModel):
     display_name: Optional[str] = None
     bio: Optional[str] = None
     username: Optional[str] = None
+    age: Optional[int] = None
+    sex: Optional[str] = None
+    weight_kg: Optional[float] = None
+    height_cm: Optional[float] = None
+    fitness_level: Optional[str] = None
+
+class InterestsUpdate(BaseModel):
+    favorite_categories: List[str]
+
+
+# Public profile (no email/weight/height/admin status leak)
+class PublicUserOut(BaseModel):
+    id: int
+    username: str
+    display_name: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    level: int
+    xp: int
+    badges: List[str] = []
+    favorite_categories: Optional[List[str]] = []
+    activities_created: int = 0
+    activities_completed: int = 0
+    reviews_written: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class UserSearchOut(BaseModel):
+    id: int
+    username: str
+    display_name: Optional[str] = None
+    avatar_url: Optional[str] = None
+    level: int
+
+    class Config:
+        from_attributes = True
 
 class AdminUserUpdate(BaseModel):
     xp: Optional[int] = None
@@ -79,7 +125,11 @@ class ActivityOut(ActivityCreate):
     id: int
     average_rating: Optional[float] = None
     review_count: Optional[int] = 0
-    
+    creator_id: Optional[int] = None
+    creator_username: Optional[str] = None
+    creator_avatar_url: Optional[str] = None
+    creator_is_admin: Optional[bool] = None
+
     class Config:
         from_attributes = True
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { StarRating, RatingDisplay } from '../../components/ui/StarRating';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
@@ -7,6 +8,7 @@ import { MessageSquare, ChevronDown, ChevronUp, Send, Trash2, User } from 'lucid
 import styles from './ActivityReviews.module.css';
 
 export function ActivityReviews({ activityId }) {
+  const navigate = useNavigate();
   const token = useAuthStore(state => state.token);
   const user = useAuthStore(state => state.user);
   const addToast = useToastStore(state => state.addToast);
@@ -184,7 +186,18 @@ export function ActivityReviews({ activityId }) {
                   <div className={styles.reviewHeader}>
                     <div className={styles.reviewer}>
                       <div className={styles.reviewerAvatar}><User size={14} /></div>
-                      <span className={styles.reviewerName}>{review.username || 'User'}</span>
+                      {review.username ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/profile/${review.username}`); }}
+                          className={styles.reviewerName}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+                        >
+                          @{review.username}
+                        </button>
+                      ) : (
+                        <span className={styles.reviewerName}>User</span>
+                      )}
                       <span className={styles.reviewDate}>{formatDate(review.created_at)}</span>
                     </div>
                     <div className={styles.reviewRight}>

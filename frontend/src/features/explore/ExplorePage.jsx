@@ -171,19 +171,36 @@ export function ExplorePage() {
               const routePts = (() => { try { return activity.route_polyline ? JSON.parse(activity.route_polyline) : []; } catch { return []; } })();
               return (
               <Card key={activity.id} className={styles.card} hoverable>
-                <div className={styles.image}>{getEmoji(activity.category)}</div>
+                <div className={styles.image} style={{ position: 'relative' }}>
+                  {getEmoji(activity.category)}
+                  {activity.creator_is_admin && (
+                    <span style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(255, 193, 7, 0.95)', color: '#6b4f00', fontSize: '0.65rem', fontWeight: 700, padding: '2px 6px', borderRadius: 999 }} title="Official EcoHealth Route">🏛️ Official</span>
+                  )}
+                </div>
                 <div className={styles.content}>
                    <div className={styles.metaTop}>
                      <span className={styles.category}>{activity.category}</span>
                      <span className={styles.difficulty}>Diff {activity.difficulty}/5</span>
                    </div>
                    <h3>{activity.title}</h3>
+                   {activity.creator_username && !activity.creator_is_admin && (
+                     <small style={{ color: 'var(--color-text-muted)', display: 'block', marginBottom: '0.4rem' }}>
+                       by{' '}
+                       <button
+                         type="button"
+                         onClick={(e) => { e.stopPropagation(); navigate(`/profile/${activity.creator_username}`); }}
+                         style={{ background: 'none', border: 'none', color: 'var(--color-primary)', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                       >
+                         @{activity.creator_username}
+                       </button>
+                     </small>
+                   )}
                    <div className={styles.metaBottom}>
                      <span className={styles.location}><Map size={14}/> {activity.loc}</span>
                      <span className={styles.time}>+{activity.xp_reward || 50} XP</span>
                    </div>
-                   <Button 
-                     variant="primary" 
+                   <Button
+                     variant="primary"
                      style={{ marginTop: '1rem', width: '100%' }}
                      onClick={() => setPreviewActivity(activity)}
                    >
@@ -200,6 +217,22 @@ export function ExplorePage() {
       <Modal isOpen={!!previewActivity} onClose={() => setPreviewActivity(null)} title={previewActivity?.title || 'Activity Details'}>
         {previewActivity && (
           <div style={{ textAlign: 'center' }}>
+            {previewActivity.creator_username && (
+              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                {previewActivity.creator_is_admin ? '🏛️ Official Route' : (
+                  <>
+                    Created by{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setPreviewActivity(null); navigate(`/profile/${previewActivity.creator_username}`); }}
+                      style={{ background: 'none', border: 'none', color: 'var(--color-primary)', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                    >
+                      @{previewActivity.creator_username}
+                    </button>
+                  </>
+                )}
+              </p>
+            )}
             {/* Route preview map */}
             <div style={{ height: '250px', borderRadius: '8px', overflow: 'hidden', marginBottom: '1rem' }}>
               <MapContainer 

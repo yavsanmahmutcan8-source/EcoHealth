@@ -52,6 +52,116 @@
   gap: 1rem;
 }
 
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 0.6rem;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem 0.45rem 2rem;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  width: 200px;
+  outline: none;
+  transition: var(--transition-smooth);
+}
+
+.searchInput:focus {
+  border-color: var(--color-primary);
+  width: 240px;
+}
+
+.searchDropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  right: 0;
+  background: var(--color-surface, var(--color-bg));
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md, 0 6px 24px rgba(0,0,0,0.12));
+  overflow: hidden;
+  z-index: 50;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.searchEmpty {
+  padding: 0.75rem 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.searchResult {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text);
+}
+
+.searchResult:hover {
+  background: var(--glass-bg);
+}
+
+.searchResult:last-child {
+  border-bottom: none;
+}
+
+.resultAvatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.resultAvatarFallback {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+}
+
+.resultMeta {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+}
+
+.resultMeta strong {
+  font-size: 0.85rem;
+}
+
+.resultMeta small {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+}
+
 .iconBtn {
   background: none;
   border: none;
@@ -123,5 +233,8 @@
   .avatar {
     width: 32px;
     height: 32px;
+  }
+  .searchWrap {
+    display: none;
   }
 }

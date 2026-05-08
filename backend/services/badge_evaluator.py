@@ -16,10 +16,12 @@ def evaluate_badges(
     completions: List[Any],
     review_count: int,
     badge_definitions: List[Any],
+    activities_created_count: int = 0,
+    creator_completions_count: int = 0,
 ) -> List[Dict]:
     """
     Stateless badge evaluation function.
-    
+
     Args:
         user_xp: Current user XP
         user_level: Current user level
@@ -27,7 +29,9 @@ def evaluate_badges(
         completions: List of CompletionLog objects (with .category, .completed_at)
         review_count: Number of reviews the user has written
         badge_definitions: List of BadgeDefinition objects
-    
+        activities_created_count: Number of activities this user has authored
+        creator_completions_count: Number of times other users completed this user's activities
+
     Returns:
         List of newly earned badge dicts (id, name, description, emoji, color)
     """
@@ -88,6 +92,12 @@ def evaluate_badges(
         elif ct == "FIRST_REVIEW":
             earned = review_count >= 1
 
+        elif ct == "ACTIVITIES_CREATED":
+            earned = activities_created_count >= cfg.get("count", 1)
+
+        elif ct == "CREATOR_COMPLETIONS":
+            earned = creator_completions_count >= cfg.get("count", 1)
+
         if earned:
             newly_earned.append({
                 "id": badge.id,
@@ -128,6 +138,8 @@ def get_badge_progress(
     completions: List[Any],
     review_count: int,
     badge_definitions: List[Any],
+    activities_created_count: int = 0,
+    creator_completions_count: int = 0,
 ) -> Dict[str, Dict]:
     """
     Calculate current progress toward each badge.
@@ -185,6 +197,10 @@ def get_badge_progress(
             progress[badge.id] = {"current": len(unique_cats), "target": cfg.get("count", 2)}
         elif ct == "FIRST_REVIEW":
             progress[badge.id] = {"current": min(review_count, 1), "target": 1}
+        elif ct == "ACTIVITIES_CREATED":
+            progress[badge.id] = {"current": activities_created_count, "target": cfg.get("count", 1)}
+        elif ct == "CREATOR_COMPLETIONS":
+            progress[badge.id] = {"current": creator_completions_count, "target": cfg.get("count", 1)}
         else:
             progress[badge.id] = {"current": 0, "target": 1}
 

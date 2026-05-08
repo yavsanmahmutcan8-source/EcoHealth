@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import func as sa_func
+from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import requests
 import os
@@ -21,8 +22,9 @@ from api.deps import get_current_user, get_current_active_admin
 from api.schemas import (
     UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
     ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
-    ReviewCreate, ReviewOut, ProfileUpdate,
-    BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut, NotificationOut
+    ReviewCreate, ReviewOut, ProfileUpdate, InterestsUpdate,
+    BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut, NotificationOut,
+    PublicUserOut, UserSearchOut
 )
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
@@ -32,25 +34,53 @@ router = APIRouter()
 
 @router.get("/activities", response_model=List[ActivityOut])
 async def get_all_activities(
-    lat: float = None, 
-    lng: float = None, 
-    radius_km: float = 10.0, 
+    lat: float = None,
+    lng: float = None,
+    radius_km: float = 10.0,
     db: AsyncSession = Depends(get_db)
 ):
     from sqlalchemy import func
-    query = select(Activity)
-    
+    query = select(Activity).options(selectinload(Activity.creator))
+
     if lat is not None and lng is not None:
         query = query.where(
             func.ST_DWithin(
-                Activity.location, 
-                func.ST_GeogFromText(f'SRID=4326;POINT({lng} {lat})'), 
+                Activity.location,
+                func.ST_GeogFromText(f'SRID=4326;POINT({lng} {lat})'),
                 radius_km * 1000
             )
         )
-        
+
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.post("/activities", response_model=ActivityOut)
+async def create_user_activity(
+    activity_in: ActivityCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Authenticated users (any role) can contribute new routes. Admins still use /admin/activities for full control."""
+    activity_data = activity_in.dict(exclude={"latitude", "longitude"})
+    # Force published state for user-created routes (no draft workflow for non-admins)
+    activity_data["visibility_state"] = "publish"
+    new_activity = Activity(**activity_data, creator_id=current_user.id)
+    new_activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
+    db.add(new_activity)
+    await db.commit()
+    await db.refresh(new_activity)
+
+    # Re-fetch with creator eager-loaded so the response includes creator_username/avatar
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == new_activity.id)
+    )
+    activity = result.scalars().first()
+
+    # Evaluate ACTIVITIES_CREATED badges for the creator
+    await _evaluate_creator_badges(current_user, db)
+
+    return activity
 
 @router.post("/auth/register", response_model=UserOut)
 async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
@@ -58,14 +88,21 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     if result.scalars().first():
         raise HTTPException(status_code=400, detail="Username already registered")
         
+    # Also block duplicate emails to give a clear error
+    email_exists = await db.execute(select(User).where(User.email == user_in.email))
+    if email_exists.scalars().first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+
     hashed_pw = get_password_hash(user_in.password)
     new_user = User(
         username=user_in.username,
         email=user_in.email,
         hashed_password=hashed_pw,
         age=user_in.age,
+        sex=user_in.sex,
         weight_kg=user_in.weight_kg,
-        height_cm=user_in.height_cm
+        height_cm=user_in.height_cm,
+        fitness_level=user_in.fitness_level,
     )
     db.add(new_user)
     await db.commit()
@@ -153,29 +190,82 @@ async def get_dashboard_recommendations(
         return {"picked_for_you": json.loads(cached_data), "cached": True}
 
     # If no cache, perform heavy DB lookup and Match Score calculation
-    result = await db.execute(select(Activity))
+    result = await db.execute(select(Activity).options(selectinload(Activity.creator)))
     activities = result.scalars().all()
-    
-    scored_list = generate_match_scores(current_user, activities)
-    
+
+    # Load completed activity IDs from CompletionLog for repeat-penalty
+    completed_result = await db.execute(
+        select(CompletionLog.activity_id).where(CompletionLog.user_id == current_user.id)
+    )
+    completed_ids = [row[0] for row in completed_result.all()]
+
+    scored_list = generate_match_scores(current_user, activities, completed_ids)
+
     # Store in Redis for 10 minutes (600 seconds)
     await redis.set(cache_key, json.dumps(scored_list), ex=600)
-    
+
     return {"picked_for_you": scored_list, "cached": False}
+
+async def _evaluate_creator_badges(user: User, db: AsyncSession):
+    """Award ACTIVITIES_CREATED / CREATOR_COMPLETIONS badges if conditions are now satisfied."""
+    activities_created_result = await db.execute(
+        select(sa_func.count(Activity.id)).where(Activity.creator_id == user.id)
+    )
+    activities_created = activities_created_result.scalar() or 0
+
+    completions_result = await db.execute(
+        select(CompletionLog).where(CompletionLog.user_id == user.id)
+    )
+    all_completions = completions_result.scalars().all()
+
+    review_count_result = await db.execute(
+        select(sa_func.count(Review.id)).where(Review.user_id == user.id)
+    )
+    review_count = review_count_result.scalar() or 0
+
+    badge_defs_result = await db.execute(select(BadgeDefinition))
+    badge_defs = badge_defs_result.scalars().all()
+
+    new_badges = evaluate_badges(
+        user_xp=user.xp,
+        user_level=user.level,
+        owned_badge_ids=user.badges or [],
+        completions=all_completions,
+        review_count=review_count,
+        badge_definitions=badge_defs,
+        activities_created_count=activities_created,
+        creator_completions_count=user.creator_completions_count or 0,
+    )
+    if new_badges:
+        user.badges = list(set((user.badges or []) + [b["id"] for b in new_badges]))
+        for b in new_badges:
+            db.add(Notification(
+                user_id=user.id,
+                type=NotificationType.BADGE_EARNED,
+                title="Badge Earned!",
+                message=f"You earned the '{b['name']}' badge!"
+            ))
+        db.add(user)
+        await db.commit()
+    return new_badges
+
 
 @router.post("/admin/activities", response_model=ActivityOut)
 async def create_activity(
-    activity_in: ActivityCreate, 
+    activity_in: ActivityCreate,
     current_admin: User = Depends(get_current_active_admin),
     db: AsyncSession = Depends(get_db)
 ):
     activity_data = activity_in.dict(exclude={"latitude", "longitude"})
-    new_activity = Activity(**activity_data)
+    new_activity = Activity(**activity_data, creator_id=current_admin.id)
     new_activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
     db.add(new_activity)
     await db.commit()
     await db.refresh(new_activity)
-    return new_activity
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == new_activity.id)
+    )
+    return result.scalars().first()
 
 @router.put("/admin/activities/{activity_id}", response_model=ActivityOut)
 async def update_activity(
@@ -184,18 +274,20 @@ async def update_activity(
     current_admin: User = Depends(get_current_active_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
     activity = result.scalars().first()
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-        
+
     update_data = activity_in.dict(exclude={"latitude", "longitude"}, exclude_unset=True)
     for key, value in update_data.items():
         setattr(activity, key, value)
-        
+
     if activity_in.latitude is not None and activity_in.longitude is not None:
         activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
-        
+
     await db.commit()
     await db.refresh(activity)
     return activity
@@ -219,12 +311,15 @@ async def delete_activity(
 async def complete_activity(
     activity_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)
 ):
-    # 1. Fetch activity
-    result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    # 1. Fetch activity (eager-load creator for XP bonus)
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
     activity = result.scalars().first()
-    
+
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
         
@@ -267,18 +362,35 @@ async def complete_activity(
     badge_defs_result = await db.execute(select(BadgeDefinition))
     badge_defs = badge_defs_result.scalars().all()
     
+    activities_created_result = await db.execute(
+        select(sa_func.count(Activity.id)).where(Activity.creator_id == current_user.id)
+    )
+    activities_created = activities_created_result.scalar() or 0
+
     new_badges = evaluate_badges(
         user_xp=current_user.xp,
         user_level=current_user.level,
         owned_badge_ids=current_user.badges or [],
         completions=all_completions,
         review_count=review_count,
-        badge_definitions=badge_defs
+        badge_definitions=badge_defs,
+        activities_created_count=activities_created,
+        creator_completions_count=current_user.creator_completions_count or 0,
     )
-    
+
     # 7. Merge badges: old gamification badges + new smart badges
     all_badge_ids = list(set((current_user.badges or []) + [b["id"] for b in new_badges]))
     current_user.badges = all_badge_ids
+
+    # 7b. Reward the creator (if different user) with 10% XP bonus + completion count bump
+    creator_to_evaluate = None
+    if activity.creator_id and activity.creator_id != current_user.id and activity.creator is not None:
+        creator = activity.creator
+        bonus_xp = max(1, int((activity.xp_reward or 0) * 0.1))
+        creator.xp = (creator.xp or 0) + bonus_xp
+        creator.creator_completions_count = (creator.creator_completions_count or 0) + 1
+        db.add(creator)
+        creator_to_evaluate = creator
     
     # 8. Create Notifications
     if calc_result["leveled_up"]:
@@ -302,7 +414,21 @@ async def complete_activity(
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
-    
+
+    # 7c. After commit, run badge evaluation for the creator (if any)
+    if creator_to_evaluate is not None:
+        await _evaluate_creator_badges(creator_to_evaluate, db)
+        try:
+            await redis.delete(f"dashboard_recs_user_{creator_to_evaluate.id}")
+        except Exception:
+            pass
+
+    # Invalidate dashboard cache: completion changes recommendations (repeat penalty + creator XP)
+    try:
+        await redis.delete(f"dashboard_recs_user_{current_user.id}")
+    except Exception:
+        pass
+
     return {
         "new_xp": calc_result["new_xp"],
         "new_level": calc_result["new_level"],
@@ -618,23 +744,30 @@ async def get_my_badge_progress(
         select(CompletionLog).where(CompletionLog.user_id == current_user.id)
     )
     completions = completions_result.scalars().all()
-    
+
     review_count_result = await db.execute(
         select(sa_func.count(Review.id)).where(Review.user_id == current_user.id)
     )
     review_count = review_count_result.scalar() or 0
-    
+
+    activities_created_result = await db.execute(
+        select(sa_func.count(Activity.id)).where(Activity.creator_id == current_user.id)
+    )
+    activities_created = activities_created_result.scalar() or 0
+
     badge_defs_result = await db.execute(select(BadgeDefinition))
     badge_defs = badge_defs_result.scalars().all()
-    
+
     progress = get_badge_progress(
         user_xp=current_user.xp,
         user_level=current_user.level,
         completions=completions,
         review_count=review_count,
-        badge_definitions=badge_defs
+        badge_definitions=badge_defs,
+        activities_created_count=activities_created,
+        creator_completions_count=current_user.creator_completions_count or 0,
     )
-    
+
     return progress
 
 # =============================================
@@ -645,23 +778,222 @@ async def get_my_badge_progress(
 async def update_my_profile(
     profile_in: ProfileUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)
 ):
     if profile_in.username and profile_in.username != current_user.username:
         existing = await db.execute(select(User).where(User.username == profile_in.username))
         if existing.scalars().first():
             raise HTTPException(status_code=400, detail="Username already taken")
         current_user.username = profile_in.username
-    
+
     if profile_in.display_name is not None:
         current_user.display_name = profile_in.display_name
     if profile_in.bio is not None:
         current_user.bio = profile_in.bio
-    
+
+    # Health & fitness fields
+    health_changed = False
+    if profile_in.age is not None:
+        current_user.age = profile_in.age
+        health_changed = True
+    if profile_in.sex is not None:
+        current_user.sex = profile_in.sex
+        health_changed = True
+    if profile_in.weight_kg is not None:
+        current_user.weight_kg = profile_in.weight_kg
+        health_changed = True
+    if profile_in.height_cm is not None:
+        current_user.height_cm = profile_in.height_cm
+        health_changed = True
+    if profile_in.fitness_level is not None:
+        valid_levels = {"beginner", "intermediate", "advanced", "athlete"}
+        if profile_in.fitness_level not in valid_levels:
+            raise HTTPException(status_code=400, detail="Invalid fitness_level")
+        current_user.fitness_level = profile_in.fitness_level
+        health_changed = True
+
     db.add(current_user)
     await db.commit()
     await db.refresh(current_user)
+
+    # Invalidate dashboard recommendations cache when health data changes
+    if health_changed:
+        try:
+            await redis.delete(f"dashboard_recs_user_{current_user.id}")
+        except Exception:
+            pass
+
     return current_user
+
+
+@router.put("/users/me/interests", response_model=UserOut)
+async def update_my_interests(
+    interests_in: InterestsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis = Depends(get_redis)
+):
+    # Validate that submitted categories actually exist
+    if interests_in.favorite_categories:
+        cats_result = await db.execute(
+            select(Category.name).where(Category.name.in_(interests_in.favorite_categories))
+        )
+        valid_names = {row[0] for row in cats_result.all()}
+        unknown = [c for c in interests_in.favorite_categories if c not in valid_names]
+        if unknown:
+            raise HTTPException(status_code=400, detail=f"Unknown categories: {unknown}")
+
+    current_user.favorite_categories = list(interests_in.favorite_categories)
+    current_user.onboarding_complete = True
+    db.add(current_user)
+    await db.commit()
+    await db.refresh(current_user)
+
+    try:
+        await redis.delete(f"dashboard_recs_user_{current_user.id}")
+    except Exception:
+        pass
+
+    return current_user
+
+# =============================================
+# PUBLIC PROFILE & SEARCH (Phase 13)
+# =============================================
+
+@router.get("/users/search", response_model=List[UserSearchOut])
+async def search_users(
+    q: str = Query(..., min_length=1, max_length=64),
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+):
+    pattern = f"%{q.strip()}%"
+    result = await db.execute(
+        select(User)
+        .where(
+            sa_func.lower(User.username).ilike(sa_func.lower(pattern))
+            | (User.display_name.is_not(None) & sa_func.lower(User.display_name).ilike(sa_func.lower(pattern)))
+        )
+        .order_by(User.username)
+        .limit(limit)
+    )
+    return result.scalars().all()
+
+
+@router.get("/users/{username}", response_model=PublicUserOut)
+async def get_public_profile(username: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    activities_created_result = await db.execute(
+        select(sa_func.count(Activity.id)).where(Activity.creator_id == user.id)
+    )
+    activities_created = activities_created_result.scalar() or 0
+
+    activities_completed_result = await db.execute(
+        select(sa_func.count(CompletionLog.id)).where(CompletionLog.user_id == user.id)
+    )
+    activities_completed = activities_completed_result.scalar() or 0
+
+    reviews_written_result = await db.execute(
+        select(sa_func.count(Review.id)).where(Review.user_id == user.id)
+    )
+    reviews_written = reviews_written_result.scalar() or 0
+
+    return PublicUserOut(
+        id=user.id,
+        username=user.username,
+        display_name=user.display_name,
+        bio=user.bio,
+        avatar_url=user.avatar_url,
+        level=user.level,
+        xp=user.xp,
+        badges=user.badges or [],
+        favorite_categories=user.favorite_categories or [],
+        activities_created=activities_created,
+        activities_completed=activities_completed,
+        reviews_written=reviews_written,
+    )
+
+
+@router.get("/users/{username}/activities")
+async def get_user_completed_activities(username: str, db: AsyncSession = Depends(get_db)):
+    user_result = await db.execute(select(User).where(User.username == username))
+    user = user_result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    log_result = await db.execute(
+        select(CompletionLog).where(CompletionLog.user_id == user.id).order_by(CompletionLog.completed_at.desc()).limit(50)
+    )
+    logs = log_result.scalars().all()
+    activity_ids = [log.activity_id for log in logs]
+    if not activity_ids:
+        return []
+
+    act_result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id.in_(activity_ids))
+    )
+    activities = {a.id: a for a in act_result.scalars().all()}
+
+    out = []
+    for log in logs:
+        a = activities.get(log.activity_id)
+        if not a:
+            continue
+        out.append({
+            "id": a.id,
+            "title": a.title,
+            "category": a.category,
+            "difficulty": a.difficulty,
+            "xp_reward": a.xp_reward,
+            "completed_at": log.completed_at.isoformat() if log.completed_at else None,
+        })
+    return out
+
+
+@router.get("/users/{username}/created-activities", response_model=List[ActivityOut])
+async def get_user_created_activities(username: str, db: AsyncSession = Depends(get_db)):
+    user_result = await db.execute(select(User).where(User.username == username))
+    user = user_result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = await db.execute(
+        select(Activity)
+        .options(selectinload(Activity.creator))
+        .where(Activity.creator_id == user.id, Activity.visibility_state == "publish")
+        .order_by(Activity.id.desc())
+    )
+    return result.scalars().all()
+
+
+@router.get("/users/{username}/reviews", response_model=List[ReviewOut])
+async def get_user_reviews(username: str, db: AsyncSession = Depends(get_db)):
+    user_result = await db.execute(select(User).where(User.username == username))
+    user = user_result.scalars().first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = await db.execute(
+        select(Review).where(Review.user_id == user.id).order_by(Review.created_at.desc())
+    )
+    rows = result.scalars().all()
+    return [
+        ReviewOut(
+            id=r.id,
+            user_id=r.user_id,
+            activity_id=r.activity_id,
+            rating=r.rating,
+            comment=r.comment,
+            created_at=r.created_at,
+            username=user.username,
+        )
+        for r in rows
+    ]
+
 
 AVATAR_DIR = "/app/static/avatars"
 
