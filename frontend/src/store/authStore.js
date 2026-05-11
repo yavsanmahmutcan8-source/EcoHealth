@@ -1,12 +1,29 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Hard cap on a stored session, in ms. Matches the backend ACCESS_TOKEN_EXPIRE
+// (7 days). If a user comes back after this we drop the token client-side so
+// they hit /auth cleanly instead of looping on a 401 from a stale token —
+// which used to leave them stuck on the onboarding screen with no escape.
+const MAX_SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const useAuthStore = create(
   persist(
     (set, get) => ({
       user: null,
       token: null,
-      
+      tokenIssuedAt: null,
+
+      // Drop session and bounce to /auth. Used by 401 handlers across the
+      // store so a stuck user is never trapped on a token-gated page.
+      forceLogout: (reason) => {
+        if (reason) console.warn('[Auth] Forced logout:', reason);
+        set({ user: null, token: null, tokenIssuedAt: null });
+        if (typeof window !== 'undefined' && window.location.pathname !== '/auth') {
+          window.location.replace('/auth');
+        }
+      },
+
       login: async (username, password) => {
         console.log('[Auth] Attempting live API login with username:', username);
         
@@ -29,11 +46,11 @@ export const useAuthStore = create(
 
         const data = await response.json();
         const token = data.access_token;
-        set({ token });
-        
+        set({ token, tokenIssuedAt: Date.now() });
+
         await get().fetchUser();
       },
-      
+
       googleLogin: async (credential) => {
         const response = await fetch('/api/auth/google', {
           method: 'POST',
@@ -46,10 +63,10 @@ export const useAuthStore = create(
         }
         const data = await response.json();
         const token = data.access_token;
-        set({ token });
+        set({ token, tokenIssuedAt: Date.now() });
         await get().fetchUser();
       },
-      
+
       register: async (username, email, password) => {
         console.log('[Auth] Attempting to register via API:', username);
 
@@ -82,6 +99,10 @@ export const useAuthStore = create(
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify(payload),
         });
+        if (response.status === 401) {
+          get().forceLogout('updateProfile 401');
+          throw new Error('Your session has expired. Please log in again.');
+        }
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
           throw new Error(err.detail || 'Failed to update profile');
@@ -97,6 +118,10 @@ export const useAuthStore = create(
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
           body: JSON.stringify({ favorite_categories: favoriteCategories }),
         });
+        if (response.status === 401) {
+          get().forceLogout('updateInterests 401');
+          throw new Error('Your session has expired. Please log in again.');
+        }
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
           throw new Error(err.detail || 'Failed to save interests');
@@ -108,15 +133,28 @@ export const useAuthStore = create(
         const token = get().token;
         if (!token) return;
 
+        // Pre-emptive expiry: if the stored session is older than the backend
+        // token lifetime, ditch it now instead of pinging the API with a dead
+        // bearer. Prevents the mobile-Safari "stuck on onboarding" trap.
+        const issuedAt = get().tokenIssuedAt;
+        if (issuedAt && Date.now() - issuedAt > MAX_SESSION_MS) {
+          get().forceLogout('token max age exceeded');
+          return;
+        }
+
         try {
           const response = await fetch('/api/users/me', {
             headers: {
               'Authorization': `Bearer ${token}`
             }
           });
-          
+
+          if (response.status === 401) {
+            get().forceLogout('fetchUser 401');
+            return;
+          }
           if (!response.ok) {
-            set({ user: null, token: null });
+            set({ user: null, token: null, tokenIssuedAt: null });
             throw new Error('Session expired');
           }
           
@@ -153,13 +191,13 @@ export const useAuthStore = create(
           set({ user: formattedUser });
         } catch (error) {
           console.error('[Auth] Failed to fetch user profile:', error);
-          set({ user: null, token: null });
+          set({ user: null, token: null, tokenIssuedAt: null });
         }
       },
 
       logout: () => {
         console.log('[Auth] LOGOUT triggered. Dropping API token and user state.');
-        set({ user: null, token: null });
+        set({ user: null, token: null, tokenIssuedAt: null });
       }
     }),
     {

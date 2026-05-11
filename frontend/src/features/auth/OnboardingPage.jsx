@@ -32,6 +32,12 @@ export function OnboardingPage() {
   const updateProfile = useAuthStore(state => state.updateProfile);
   const updateInterests = useAuthStore(state => state.updateInterests);
   const user = useAuthStore(state => state.user);
+  const logout = useAuthStore(state => state.logout);
+
+  const handleEscapeLogout = () => {
+    logout();
+    navigate('/auth', { replace: true });
+  };
 
   useEffect(() => {
     fetch('/api/categories').then(r => r.ok ? r.json() : []).then(setCategories).catch(() => {});
@@ -94,7 +100,20 @@ export function OnboardingPage() {
   if (step === 'about_you') {
     return (
       <>
-        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 50 }}>
+        <div style={{ position: 'absolute', top: '1.5rem', right: '1.5rem', zIndex: 50, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={handleEscapeLogout}
+            style={{
+              background: 'rgba(0,0,0,0.04)', border: '1px solid var(--glass-border)',
+              borderRadius: '8px', padding: '0.4rem 0.75rem',
+              color: 'var(--color-text-muted)', cursor: 'pointer',
+              fontSize: '0.78rem', fontWeight: 600,
+            }}
+            title="Sign out and return to login"
+          >
+            Log out
+          </button>
           <ThemeToggle />
         </div>
         <div className={styles.authContainer}>

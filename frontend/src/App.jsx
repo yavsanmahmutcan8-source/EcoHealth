@@ -42,11 +42,23 @@ function RequireAuth({ children, requireOnboarded = true }) {
 function App() {
   const initTheme = useThemeStore(state => state.initTheme);
   const user = useAuthStore(state => state.user);
+  const token = useAuthStore(state => state.token);
+  const fetchUser = useAuthStore(state => state.fetchUser);
 
   useEffect(() => {
     console.log('[App] Mounted. Current user state:', user);
     initTheme();
   }, [initTheme, user]);
+
+  // Boot-time token revalidation. If a persisted token has aged past the
+  // backend's expiry, fetchUser() detects it and force-logs-out before any
+  // route loads — avoids the "stuck on onboarding with stale token" trap.
+  useEffect(() => {
+    if (token) {
+      fetchUser();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <BrowserRouter>

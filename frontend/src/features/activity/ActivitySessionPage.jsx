@@ -368,11 +368,21 @@ export function ActivitySessionPage() {
                 <span>{formatTime(elapsedSeconds)}</span>
                 <small>Duration</small>
               </div>
-              <div className={styles.celebStat}>
-                <Route size={20} />
-                <span>{formatDistance(distanceTraveled)}</span>
-                <small>Distance</small>
-              </div>
+              {(() => {
+                // Prefer backend-logged distance (km → m) so distance-required
+                // activities show the planned distance even when GPS didn't
+                // accumulate movement (e.g. user testing on desktop). Falls
+                // back to the live GPS distance when backend didn't log any.
+                const loggedKm = Number(completionResult?.distance_logged_km || 0);
+                const displayMeters = loggedKm > 0 ? loggedKm * 1000 : distanceTraveled;
+                return (
+                  <div className={styles.celebStat}>
+                    <Route size={20} />
+                    <span>{formatDistance(displayMeters)}</span>
+                    <small>Distance</small>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* XP & Level */}

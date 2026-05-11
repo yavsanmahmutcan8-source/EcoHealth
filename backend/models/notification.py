@@ -8,6 +8,7 @@ class NotificationType(str, enum.Enum):
     BADGE_EARNED = "BADGE_EARNED"
     LEVEL_UP = "LEVEL_UP"
     NEW_ACTIVITY = "NEW_ACTIVITY"
+    ACTIVITY_COMPLETED = "ACTIVITY_COMPLETED"
     SYSTEM = "SYSTEM"
 
 class Notification(Base):

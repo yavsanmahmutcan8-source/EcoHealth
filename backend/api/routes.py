@@ -442,6 +442,21 @@ async def complete_activity(
         creator_to_evaluate = creator
     
     # 8. Create Notifications
+    # 8a. Always record an "Activity Completed" notification so the user sees
+    # a feed entry for each finished session (alongside any badge/level pings).
+    activity_title = activity.title or "your activity"
+    completion_msg_parts = [f"You completed '{activity_title}'"]
+    if kcal_burned and kcal_burned > 0:
+        completion_msg_parts.append(f"— burned {int(round(kcal_burned))} kcal")
+    if distance_logged_km and distance_logged_km > 0:
+        completion_msg_parts.append(f"over {distance_logged_km:.2f} km")
+    db.add(Notification(
+        user_id=current_user.id,
+        type=NotificationType.ACTIVITY_COMPLETED,
+        title="Activity Completed!",
+        message=" ".join(completion_msg_parts) + ".",
+    ))
+
     if calc_result["leveled_up"]:
         notif = Notification(
             user_id=current_user.id,

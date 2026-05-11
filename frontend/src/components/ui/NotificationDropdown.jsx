@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useAuthStore } from '../../store/authStore';
-import { Check, Trophy, ChevronUp, Bell, Activity, Info } from 'lucide-react';
+import { Check, Trophy, ChevronUp, Bell, Activity, Info, Flag } from 'lucide-react';
 import styles from './NotificationDropdown.module.css';
 
 export function NotificationDropdown({ isOpen, onClose }) {
@@ -34,6 +34,7 @@ export function NotificationDropdown({ isOpen, onClose }) {
     switch (type) {
       case 'BADGE_EARNED': return <Trophy size={18} color="#FFD700" />;
       case 'LEVEL_UP': return <ChevronUp size={18} color="#4CAF50" />;
+      case 'ACTIVITY_COMPLETED': return <Flag size={18} color="#4CAF50" />;
       case 'NEW_ACTIVITY': return <Activity size={18} color="#2196F3" />;
       default: return <Info size={18} color="#9C27B0" />;
     }
