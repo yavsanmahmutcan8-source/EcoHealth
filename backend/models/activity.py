@@ -23,6 +23,9 @@ class Activity(Base):
     difficulty = Column(Integer, default=1) # 1 to 5 scale
     estimated_duration_minutes = Column(Integer, default=60)
     distance_km = Column(Float, nullable=True, default=0, server_default="0")
+    # Loop routes (e.g. running 3 laps around a track) — distance multiplied by lap_count
+    is_loop = Column(Boolean, nullable=False, default=False, server_default="false")
+    lap_count = Column(Integer, nullable=False, default=1, server_default="1")
     xp_reward = Column(Integer, default=50)
 
     is_verified_route = Column(Boolean, default=False)

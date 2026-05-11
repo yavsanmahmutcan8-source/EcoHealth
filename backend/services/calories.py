@@ -39,14 +39,18 @@ def calculate_calories(
     *,
     met: Optional[float],
     weight_kg: Optional[float],
-    duration_minutes: Optional[int],
+    duration_minutes: Optional[float],
     sex: Optional[str] = None,
     age: Optional[int] = None,
 ) -> float:
-    """Return kcal burned. Falls back to safe defaults when any input is None/0."""
+    """Return kcal burned. Falls back to safe defaults when any input is None/0.
+
+    duration_minutes may be a float (e.g. derived from a session timer in
+    seconds). Negative/zero values fall back to 60 minutes.
+    """
     met_v = met if (met and met > 0) else DEFAULT_MET
     weight = weight_kg if (weight_kg and weight_kg > 0) else DEFAULT_WEIGHT_KG
-    minutes = duration_minutes if (duration_minutes and duration_minutes > 0) else 60
+    minutes = duration_minutes if (duration_minutes and duration_minutes > 0) else 60.0
     hours = minutes / 60.0
     kcal = met_v * weight * hours * _sex_factor(sex) * _age_factor(age)
     return round(kcal, 1)

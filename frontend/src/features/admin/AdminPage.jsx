@@ -1,14 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Trash2, Edit3, Plus } from 'lucide-react';
+import { Trash2, Edit3, Plus, Undo2, Redo2 } from 'lucide-react';
+import { MapSearchBar } from '../../components/ui/MapSearchBar';
+import { polylineDistanceKm } from '../../utils/geo';
 import styles from './AdminPage.module.css';
 
 // Fix leaflet marker icon paths
@@ -19,20 +21,19 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function RouteBuilderMap({ points, setPoints }) {
+function RouteClicker({ onAdd }) {
   useMapEvents({
-    click(e) {
-      setPoints([...points, [e.latlng.lat, e.latlng.lng]]);
-    }
+    click(e) { onAdd([e.latlng.lat, e.latlng.lng]); }
   });
+  return null;
+}
 
-  return (
-    <>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {points.length > 0 && <Marker position={points[0]} />}
-      {points.length > 1 && <Polyline positions={points} color="blue" />}
-    </>
-  );
+function MapFlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) map.flyTo(target, 15, { duration: 0.8 });
+  }, [target, map]);
+  return null;
 }
 
 export function AdminPage() {
@@ -51,8 +52,12 @@ export function AdminPage() {
   const [difficulty, setDifficulty] = useState(1);
   const [xpReward, setXpReward] = useState(50);
   const [duration, setDuration] = useState(60);
-  const [distanceKm, setDistanceKm] = useState(0);
+  const [isLoop, setIsLoop] = useState(false);
+  const [lapCount, setLapCount] = useState(1);
   const [routePoints, setRoutePoints] = useState([]);
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const [flyTarget, setFlyTarget] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Category form state
@@ -60,7 +65,62 @@ export function AdminPage() {
   const [newCatEmoji, setNewCatEmoji] = useState('📍');
   const [newCatColor, setNewCatColor] = useState('#4CAF50');
   const [newCatMet, setNewCatMet] = useState(4.0);
+  const [newCatRequiresDistance, setNewCatRequiresDistance] = useState(true);
   const [editingCat, setEditingCat] = useState(null);
+
+  // Selected category metadata for the route builder
+  const selectedCategory = useMemo(
+    () => categories.find(c => c.name === category) || null,
+    [categories, category]
+  );
+  const requiresDistance = selectedCategory ? !!selectedCategory.requires_distance : true;
+
+  const computedDistanceKm = useMemo(
+    () => polylineDistanceKm(routePoints, isLoop),
+    [routePoints, isLoop]
+  );
+  const effectiveDistanceKm = useMemo(
+    () => computedDistanceKm * (isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1),
+    [computedDistanceKm, isLoop, lapCount]
+  );
+
+  // Reset loop/lap when category is non-distance
+  useEffect(() => {
+    if (!requiresDistance) {
+      setIsLoop(false);
+      setLapCount(1);
+    }
+  }, [requiresDistance]);
+
+  const pushPoint = (pt) => {
+    setUndoStack(stack => [...stack, routePoints]);
+    setRedoStack([]);
+    setRoutePoints(pts => [...pts, pt]);
+  };
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack(stack => stack.slice(0, -1));
+    setRedoStack(stack => [routePoints, ...stack]);
+    setRoutePoints(prev);
+  };
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[0];
+    setRedoStack(stack => stack.slice(1));
+    setUndoStack(stack => [...stack, routePoints]);
+    setRoutePoints(next);
+  };
+  const handleClearRoute = () => {
+    if (routePoints.length === 0) return;
+    setUndoStack(stack => [...stack, routePoints]);
+    setRedoStack([]);
+    setRoutePoints([]);
+  };
+
+  const displayPolyline = isLoop && routePoints.length > 1
+    ? [...routePoints, routePoints[0]]
+    : routePoints;
 
   useEffect(() => {
     fetchUsers();
@@ -172,7 +232,9 @@ export function AdminPage() {
           longitude: routePoints[0][1],
           xp_reward: parseInt(xpReward),
           estimated_duration_minutes: parseInt(duration),
-          distance_km: parseFloat(distanceKm) || 0,
+          distance_km: requiresDistance ? Number(computedDistanceKm.toFixed(3)) : 0,
+          is_loop: requiresDistance ? isLoop : false,
+          lap_count: requiresDistance && isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1,
           route_polyline: JSON.stringify(routePoints),
           visibility_state: 'publish'
         })
@@ -182,6 +244,10 @@ export function AdminPage() {
         addToast("Activity created successfully!", "success");
         setTitle('');
         setRoutePoints([]);
+        setUndoStack([]);
+        setRedoStack([]);
+        setIsLoop(false);
+        setLapCount(1);
         fetchActivities();
         setActiveTab('activities');
       } else {
@@ -343,21 +409,60 @@ export function AdminPage() {
                   <input type="number" className={styles.input} value={duration} onChange={e => setDuration(e.target.value)} required />
                 </div>
               </div>
-              <div className={styles.formGroup}>
-                <label>Distance (km)</label>
-                <input type="number" step="0.1" min="0" className={styles.input} value={distanceKm} onChange={e => setDistanceKm(e.target.value)} placeholder="e.g. 3.5" />
-              </div>
-              
-              <div className={styles.formGroup}>
-                <label>Draw Route (Click to place start point and path markers)</label>
-                <div style={{ height: '300px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
-                  <MapContainer center={[39.92077, 32.85411]} zoom={6} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
-                    <RouteBuilderMap points={routePoints} setPoints={setRoutePoints} />
-                  </MapContainer>
+              {selectedCategory && !requiresDistance && (
+                <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '0 0 0.75rem' }}>
+                  ℹ️ {selectedCategory.name} is a time-based activity — distance and laps are not used for calorie burn.
+                </p>
+              )}
+
+              {requiresDistance && (
+                <div className={styles.formGroup}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={isLoop} onChange={e => setIsLoop(e.target.checked)} style={{ width: 16, height: 16 }} />
+                    Connect start and end points (loop route)
+                  </label>
+                  {isLoop && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <label>Laps</label>
+                      <input type="number" min="1" max="50" className={styles.input} value={lapCount} onChange={e => setLapCount(e.target.value)} />
+                      <small style={{ color: 'var(--color-text-muted)' }}>
+                        One lap is {computedDistanceKm.toFixed(2)} km, total {effectiveDistanceKm.toFixed(2)} km.
+                      </small>
+                    </div>
+                  )}
                 </div>
-                <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                  <small style={{ color: 'var(--color-text-muted)' }}>{routePoints.length} points placed.</small>
-                  <Button variant="secondary" onClick={(e) => { e.preventDefault(); setRoutePoints([]); }} style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}>Clear Map</Button>
+              )}
+
+              <div className={styles.formGroup}>
+                <label>Search a location, then click the map to draw your route</label>
+                <div style={{ position: 'relative' }}>
+                  <div style={{ height: '300px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--glass-border)' }}>
+                    <MapContainer center={[39.92077, 32.85411]} zoom={6} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
+                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                      <MapFlyTo target={flyTarget} />
+                      <RouteClicker onAdd={pushPoint} />
+                      {routePoints.length > 0 && <Marker position={routePoints[0]} />}
+                      {displayPolyline.length > 1 && (
+                        <Polyline positions={displayPolyline} color={isLoop ? '#1976d2' : '#4CAF50'} weight={4} />
+                      )}
+                    </MapContainer>
+                  </div>
+                  <div style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 1100 }}>
+                    <MapSearchBar onSelect={(lat, lng) => setFlyTarget([lat, lng])} placeholder="Search city, park, address…" />
+                  </div>
+                </div>
+                <div style={{ marginTop: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <small style={{ color: 'var(--color-text-muted)' }}>
+                    {routePoints.length} points placed
+                    {requiresDistance && routePoints.length > 1 && (
+                      <> · ≈ {computedDistanceKm.toFixed(2)} km{isLoop && lapCount > 1 ? ` × ${lapCount} laps = ${effectiveDistanceKm.toFixed(2)} km` : ''}</>
+                    )}
+                  </small>
+                  <div style={{ display: 'flex', gap: '0.4rem' }}>
+                    <Button variant="secondary" onClick={(e) => { e.preventDefault(); handleUndo(); }} disabled={undoStack.length === 0} style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', opacity: undoStack.length === 0 ? 0.4 : 1 }} title="Undo"><Undo2 size={14} /> Undo</Button>
+                    <Button variant="secondary" onClick={(e) => { e.preventDefault(); handleRedo(); }} disabled={redoStack.length === 0} style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem', opacity: redoStack.length === 0 ? 0.4 : 1 }} title="Redo"><Redo2 size={14} /> Redo</Button>
+                    <Button variant="secondary" onClick={(e) => { e.preventDefault(); handleClearRoute(); }} style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}>Clear</Button>
+                  </div>
                 </div>
               </div>
 
@@ -383,14 +488,20 @@ export function AdminPage() {
                 const res = await fetch(url, {
                   method,
                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({ name: newCatName, emoji: newCatEmoji, color: newCatColor, calorie_met: parseFloat(newCatMet) || 4.0 })
+                  body: JSON.stringify({
+                    name: newCatName,
+                    emoji: newCatEmoji,
+                    color: newCatColor,
+                    calorie_met: parseFloat(newCatMet) || 4.0,
+                    requires_distance: !!newCatRequiresDistance,
+                  })
                 });
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}));
                   throw new Error(err.detail || 'Failed');
                 }
                 addToast(editingCat ? 'Category updated!' : 'Category created!', 'success');
-                setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); setEditingCat(null);
+                setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); setNewCatRequiresDistance(true); setEditingCat(null);
                 fetchCategories();
               } catch (err) {
                 addToast(err.message, 'error');
@@ -412,11 +523,18 @@ export function AdminPage() {
                 <label title="Metabolic Equivalent of Task — controls calorie burn (yoga ~2.5, walking ~3.5, running ~9.8)">MET</label>
                 <input type="number" step="0.1" min="1" max="20" className={styles.input} value={newCatMet} onChange={e => setNewCatMet(e.target.value)} />
               </div>
+              <div className={styles.formGroup} style={{ flex: 1, minWidth: '140px', marginBottom: 0 }}>
+                <label title="Uncheck for activities with no meaningful distance (yoga, climbing, bird watching). Calories then come from elapsed session time only.">Tracks distance?</label>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', height: 42, fontSize: '0.85rem' }}>
+                  <input type="checkbox" checked={newCatRequiresDistance} onChange={e => setNewCatRequiresDistance(e.target.checked)} style={{ width: 16, height: 16 }} />
+                  {newCatRequiresDistance ? 'Yes' : 'No (time-based)'}
+                </label>
+              </div>
               <Button variant="primary" type="submit" style={{ minWidth: '110px' }}>
                 <Plus size={16} style={{ marginRight: '0.3rem' }} /> {editingCat ? 'Update' : 'Add'}
               </Button>
               {editingCat && (
-                <Button variant="secondary" onClick={() => { setEditingCat(null); setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); }} style={{ minWidth: '80px' }}>Cancel</Button>
+                <Button variant="secondary" onClick={() => { setEditingCat(null); setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); setNewCatRequiresDistance(true); }} style={{ minWidth: '80px' }}>Cancel</Button>
               )}
             </form>
 
@@ -424,7 +542,7 @@ export function AdminPage() {
             <div style={{ overflowX: 'auto' }}>
               <table className={styles.table}>
                 <thead>
-                  <tr><th>Emoji</th><th>Name</th><th>Color</th><th title="Metabolic Equivalent of Task">MET</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
+                  <tr><th>Emoji</th><th>Name</th><th>Color</th><th title="Metabolic Equivalent of Task">MET</th><th title="Whether the activity tracks distance">Distance?</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
                 </thead>
                 <tbody>
                   {categories.map(c => (
@@ -433,9 +551,10 @@ export function AdminPage() {
                       <td>{c.name}</td>
                       <td><span style={{ display: 'inline-block', width: 20, height: 20, borderRadius: '50%', background: c.color, verticalAlign: 'middle' }}></span></td>
                       <td>{c.calorie_met ?? 4.0}</td>
+                      <td>{(c.requires_distance ?? true) ? '✅' : '⏱️ time'}</td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
-                          <button onClick={() => { setEditingCat(c); setNewCatName(c.name); setNewCatEmoji(c.emoji); setNewCatColor(c.color); setNewCatMet(c.calorie_met ?? 4.0); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Edit"><Edit3 size={16} /></button>
+                          <button onClick={() => { setEditingCat(c); setNewCatName(c.name); setNewCatEmoji(c.emoji); setNewCatColor(c.color); setNewCatMet(c.calorie_met ?? 4.0); setNewCatRequiresDistance(c.requires_distance ?? true); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Edit"><Edit3 size={16} /></button>
                           <button onClick={async () => {
                             if (!confirm(`Delete category "${c.name}"?`)) return;
                             await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -447,7 +566,7 @@ export function AdminPage() {
                     </tr>
                   ))}
                   {categories.length === 0 && (
-                    <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No categories yet. Create one above!</td></tr>
+                    <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No categories yet. Create one above!</td></tr>
                   )}
                 </tbody>
               </table>

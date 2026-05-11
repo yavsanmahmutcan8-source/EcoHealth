@@ -21,7 +21,7 @@ from core.security import verify_password, get_password_hash, create_access_toke
 from api.deps import get_current_user, get_current_active_admin
 from api.schemas import (
     UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
-    ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
+    ActivityCompletionBody, ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
     ReviewCreate, ReviewOut, ProfileUpdate, InterestsUpdate,
     BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut, NotificationOut,
     PublicUserOut, UserSearchOut
@@ -328,6 +328,7 @@ async def delete_activity(
 @router.post("/activities/{activity_id}/complete", response_model=ActivityCompletionResult)
 async def complete_activity(
     activity_id: int,
+    body: Optional[ActivityCompletionBody] = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis = Depends(get_redis)
@@ -344,19 +345,31 @@ async def complete_activity(
     # 2. Increment user completion count (or 0 guard for legacy NULL rows)
     current_user.completed_activities_count = (current_user.completed_activities_count or 0) + 1
 
-    # 2b. Accumulate distance + calories (scientifically: MET-based formula)
-    activity_distance = float(activity.distance_km or 0)
-    current_user.total_distance_km = float(current_user.total_distance_km or 0) + activity_distance
-
-    # Look up MET for this activity's category
+    # 2b. Look up category to decide distance/time semantics
     cat_result = await db.execute(select(Category).where(Category.name == activity.category))
     category_obj = cat_result.scalars().first()
     activity_met = category_obj.calorie_met if category_obj else None
+    requires_distance = bool(category_obj.requires_distance) if category_obj else True
+
+    # 2c. Distance (only meaningful for distance-based categories). Loop activities
+    # multiply per-loop distance by lap_count.
+    lap_count = max(1, int(activity.lap_count or 1))
+    single_distance = float(activity.distance_km or 0)
+    distance_logged_km = single_distance * lap_count if requires_distance else 0.0
+    current_user.total_distance_km = float(current_user.total_distance_km or 0) + distance_logged_km
+
+    # 2d. Determine duration. Real elapsed session time (from frontend) takes
+    # priority; otherwise fall back to activity.estimated_duration_minutes.
+    if body and body.duration_seconds and body.duration_seconds > 0:
+        duration_minutes = body.duration_seconds / 60.0
+    else:
+        # Estimated duration is per-lap; scale by lap_count for the calorie estimate.
+        duration_minutes = (activity.estimated_duration_minutes or 60) * lap_count
 
     kcal_burned = calculate_calories(
         met=activity_met,
         weight_kg=current_user.weight_kg,
-        duration_minutes=activity.estimated_duration_minutes,
+        duration_minutes=duration_minutes,
         sex=current_user.sex,
         age=current_user.age,
     )
@@ -470,7 +483,9 @@ async def complete_activity(
         "new_level": calc_result["new_level"],
         "leveled_up": calc_result["leveled_up"],
         "newly_unlocked_badges": calc_result["newly_unlocked_badges"] + new_badges,
-        "total_badges": all_badge_ids
+        "total_badges": all_badge_ids,
+        "kcal_burned": kcal_burned,
+        "distance_logged_km": distance_logged_km,
     }
 
 @router.put("/admin/users/{user_id}", response_model=UserOut)

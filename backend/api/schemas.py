@@ -105,6 +105,8 @@ class ActivityCreate(BaseModel):
     xp_reward: Optional[int] = 50
     estimated_duration_minutes: Optional[int] = 60
     distance_km: Optional[float] = 0
+    is_loop: Optional[bool] = False
+    lap_count: Optional[int] = 1
 
     # Optional map data
     route_polyline: Optional[str] = None
@@ -121,6 +123,8 @@ class ActivityUpdate(BaseModel):
     xp_reward: Optional[int] = None
     estimated_duration_minutes: Optional[int] = None
     distance_km: Optional[float] = None
+    is_loop: Optional[bool] = None
+    lap_count: Optional[int] = None
     route_polyline: Optional[str] = None
     map_boundaries: Optional[str] = None
     visibility_state: Optional[str] = None
@@ -137,12 +141,20 @@ class ActivityOut(ActivityCreate):
     class Config:
         from_attributes = True
 
+class ActivityCompletionBody(BaseModel):
+    # Real elapsed time from frontend session timer (seconds).
+    # When provided this drives the calorie calculation; otherwise the
+    # backend falls back to activity.estimated_duration_minutes.
+    duration_seconds: Optional[int] = None
+
 class ActivityCompletionResult(BaseModel):
     new_xp: int
     new_level: int
     leveled_up: bool
     newly_unlocked_badges: list
     total_badges: List[str]
+    kcal_burned: Optional[float] = 0
+    distance_logged_km: Optional[float] = 0
 
 # Category Schemas
 class CategoryCreate(BaseModel):
@@ -150,12 +162,14 @@ class CategoryCreate(BaseModel):
     emoji: str = "📍"
     color: str = "#4CAF50"
     calorie_met: Optional[float] = 4.0
+    requires_distance: Optional[bool] = True
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     emoji: Optional[str] = None
     color: Optional[str] = None
     calorie_met: Optional[float] = None
+    requires_distance: Optional[bool] = None
 
 class CategoryOut(BaseModel):
     id: int
@@ -163,6 +177,7 @@ class CategoryOut(BaseModel):
     emoji: str
     color: str
     calorie_met: float = 4.0
+    requires_distance: bool = True
 
     class Config:
         from_attributes = True

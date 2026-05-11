@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { MapSearchBar } from '../../components/ui/MapSearchBar';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { MapContainer, TileLayer, Marker, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { ArrowLeft, MapPin } from 'lucide-react';
+import { ArrowLeft, MapPin, Undo2, Redo2 } from 'lucide-react';
+import { polylineDistanceKm } from '../../utils/geo';
 import styles from './CreateActivityPage.module.css';
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -19,20 +21,19 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
 });
 
-function RouteBuilderMap({ points, setPoints }) {
+function RouteClicker({ onAdd }) {
   useMapEvents({
-    click(e) {
-      setPoints([...points, [e.latlng.lat, e.latlng.lng]]);
-    }
+    click(e) { onAdd([e.latlng.lat, e.latlng.lng]); }
   });
+  return null;
+}
 
-  return (
-    <>
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {points.length > 0 && <Marker position={points[0]} />}
-      {points.length > 1 && <Polyline positions={points} color="#4CAF50" weight={4} />}
-    </>
-  );
+function MapFlyTo({ target }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) map.flyTo(target, 15, { duration: 0.8 });
+  }, [target, map]);
+  return null;
 }
 
 export function CreateActivityPage() {
@@ -47,10 +48,34 @@ export function CreateActivityPage() {
   const [difficulty, setDifficulty] = useState(3);
   const [xpReward, setXpReward] = useState(50);
   const [duration, setDuration] = useState(60);
-  const [distanceKm, setDistanceKm] = useState(0);
+  const [isLoop, setIsLoop] = useState(false);
+  const [lapCount, setLapCount] = useState(1);
+
+  // Route drawing with undo/redo history
   const [routePoints, setRoutePoints] = useState([]);
+  const [undoStack, setUndoStack] = useState([]);  // each entry is a previous points array
+  const [redoStack, setRedoStack] = useState([]);
+
   const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]);
+  const [flyTarget, setFlyTarget] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Find selected category object to read requires_distance
+  const selectedCategory = useMemo(
+    () => categories.find(c => c.name === category) || null,
+    [categories, category]
+  );
+  const requiresDistance = selectedCategory ? !!selectedCategory.requires_distance : true;
+
+  // Auto-computed distance from the drawn route
+  const computedDistanceKm = useMemo(
+    () => polylineDistanceKm(routePoints, isLoop),
+    [routePoints, isLoop]
+  );
+  const effectiveDistanceKm = useMemo(
+    () => computedDistanceKm * (isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1),
+    [computedDistanceKm, isLoop, lapCount]
+  );
 
   useEffect(() => {
     fetch('/api/categories')
@@ -68,6 +93,52 @@ export function CreateActivityPage() {
       );
     }
   }, []);
+
+  // When category changes to a non-distance one, reset loop/lap to defaults
+  useEffect(() => {
+    if (!requiresDistance) {
+      setIsLoop(false);
+      setLapCount(1);
+    }
+  }, [requiresDistance]);
+
+  const pushPoint = (pt) => {
+    setUndoStack(stack => [...stack, routePoints]);
+    setRedoStack([]);
+    setRoutePoints(pts => [...pts, pt]);
+  };
+
+  const handleUndo = () => {
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack(stack => stack.slice(0, -1));
+    setRedoStack(stack => [routePoints, ...stack]);
+    setRoutePoints(prev);
+  };
+
+  const handleRedo = () => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[0];
+    setRedoStack(stack => stack.slice(1));
+    setUndoStack(stack => [...stack, routePoints]);
+    setRoutePoints(next);
+  };
+
+  const handleClear = () => {
+    if (routePoints.length === 0) return;
+    setUndoStack(stack => [...stack, routePoints]);
+    setRedoStack([]);
+    setRoutePoints([]);
+  };
+
+  const handleSearchSelect = (lat, lng) => {
+    setFlyTarget([lat, lng]);
+  };
+
+  // Loop visualisation: append first point at end so polyline closes
+  const displayPolyline = isLoop && routePoints.length > 1
+    ? [...routePoints, routePoints[0]]
+    : routePoints;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -100,7 +171,9 @@ export function CreateActivityPage() {
           longitude: routePoints[0][1],
           xp_reward: parseInt(xpReward, 10),
           estimated_duration_minutes: parseInt(duration, 10),
-          distance_km: parseFloat(distanceKm) || 0,
+          distance_km: requiresDistance ? Number(computedDistanceKm.toFixed(3)) : 0,
+          is_loop: requiresDistance ? isLoop : false,
+          lap_count: requiresDistance && isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1,
           route_polyline: JSON.stringify(routePoints),
         }),
       });
@@ -110,7 +183,6 @@ export function CreateActivityPage() {
         throw new Error(err.detail || 'Failed to create activity');
       }
 
-      // Backend forces draft state for non-admin submissions
       if (user?.is_admin) {
         addToast('Activity published! 🎉', 'success');
       } else {
@@ -163,6 +235,11 @@ export function CreateActivityPage() {
                     <option key={c.id} value={c.name}>{c.emoji} {c.name}</option>
                   ))}
                 </select>
+                {selectedCategory && !requiresDistance && (
+                  <small style={{ color: 'var(--color-text-muted)' }}>
+                    ℹ️ This activity doesn't track distance — calories are calculated from your session time.
+                  </small>
+                )}
               </div>
 
               <div className={styles.field}>
@@ -190,7 +267,7 @@ export function CreateActivityPage() {
                 required
               />
               <Input
-                label="Est. Duration (mins)"
+                label="Est. Duration (mins, per lap if loop)"
                 type="number"
                 min="5"
                 max="600"
@@ -200,35 +277,95 @@ export function CreateActivityPage() {
               />
             </div>
 
-            <Input
-              label="Distance (km)"
-              type="number"
-              min="0"
-              step="0.1"
-              value={distanceKm}
-              onChange={e => setDistanceKm(e.target.value)}
-              placeholder="e.g. 3.5"
-            />
+            {requiresDistance && (
+              <div className={styles.field}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={isLoop}
+                    onChange={(e) => setIsLoop(e.target.checked)}
+                    style={{ width: 16, height: 16 }}
+                  />
+                  Connect start and end points (loop route)
+                </label>
+                {isLoop && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <label>Laps</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={lapCount}
+                      onChange={(e) => setLapCount(e.target.value)}
+                      className={styles.select}
+                    />
+                    <small style={{ color: 'var(--color-text-muted)' }}>
+                      One lap is {computedDistanceKm.toFixed(2)} km, total {effectiveDistanceKm.toFixed(2)} km.
+                    </small>
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className={styles.field}>
               <label>
                 <MapPin size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
-                Tap the map to draw your route
+                Search a location, then tap the map to draw your route
               </label>
-              <div className={styles.mapBox}>
-                <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
-                  <RouteBuilderMap points={routePoints} setPoints={setRoutePoints} />
-                </MapContainer>
+
+              <div style={{ position: 'relative' }}>
+                <div className={styles.mapBox}>
+                  <MapContainer center={mapCenter} zoom={13} scrollWheelZoom={true} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <MapFlyTo target={flyTarget} />
+                    <RouteClicker onAdd={pushPoint} />
+                    {routePoints.length > 0 && <Marker position={routePoints[0]} />}
+                    {displayPolyline.length > 1 && (
+                      <Polyline positions={displayPolyline} color={isLoop ? '#1976d2' : '#4CAF50'} weight={4} />
+                    )}
+                  </MapContainer>
+                </div>
+                <div style={{ position: 'absolute', top: 10, left: 10, right: 10, zIndex: 1100 }}>
+                  <MapSearchBar onSelect={handleSearchSelect} placeholder="Search city, park, address…" />
+                </div>
               </div>
+
               <div className={styles.mapHint}>
-                <small>{routePoints.length} {routePoints.length === 1 ? 'point' : 'points'} placed</small>
-                <button
-                  type="button"
-                  onClick={() => setRoutePoints([])}
-                  className={styles.clearBtn}
-                >
-                  Clear Map
-                </button>
+                <small>
+                  {routePoints.length} {routePoints.length === 1 ? 'point' : 'points'} placed
+                  {requiresDistance && routePoints.length > 1 && (
+                    <> · ≈ {computedDistanceKm.toFixed(2)} km{isLoop && lapCount > 1 ? ` × ${lapCount} laps = ${effectiveDistanceKm.toFixed(2)} km` : ''}</>
+                  )}
+                </small>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button
+                    type="button"
+                    onClick={handleUndo}
+                    disabled={undoStack.length === 0}
+                    className={styles.clearBtn}
+                    title="Undo last point"
+                    style={{ opacity: undoStack.length === 0 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Undo2 size={14} /> Undo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRedo}
+                    disabled={redoStack.length === 0}
+                    className={styles.clearBtn}
+                    title="Redo"
+                    style={{ opacity: redoStack.length === 0 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <Redo2 size={14} /> Redo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClear}
+                    className={styles.clearBtn}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
             </div>
 

@@ -131,6 +131,9 @@ export function ActivitySessionPage() {
   }, [activeActivity, navigate]);
 
   const handleComplete = async () => {
+    // Capture real elapsed session time BEFORE flipping state — the store
+    // stops ticking once sessionState is no longer 'active'.
+    const durationSeconds = elapsedSeconds || 0;
     completeActivity();
     try {
       const res = await fetch(`/api/activities/${activeActivity.id}/complete`, {
@@ -138,7 +141,8 @@ export function ActivitySessionPage() {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ duration_seconds: durationSeconds }),
       });
       if (!res.ok) throw new Error('Failed to complete activity');
       const data = await res.json();
