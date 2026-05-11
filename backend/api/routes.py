@@ -29,6 +29,7 @@ from api.schemas import (
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
 from services.badge_evaluator import evaluate_badges, get_badge_progress
+from services.calories import calculate_calories
 
 router = APIRouter()
 
@@ -41,6 +42,9 @@ async def get_all_activities(
 ):
     from sqlalchemy import func
     query = select(Activity).options(selectinload(Activity.creator))
+
+    # Public listing only shows published activities
+    query = query.where(Activity.visibility_state == "publish")
 
     if lat is not None and lng is not None:
         query = query.where(
@@ -61,10 +65,10 @@ async def create_user_activity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Authenticated users (any role) can contribute new routes. Admins still use /admin/activities for full control."""
+    """Authenticated users (any role) can submit new routes. Non-admin submissions go to 'draft' and require admin approval."""
     activity_data = activity_in.dict(exclude={"latitude", "longitude"})
-    # Force published state for user-created routes (no draft workflow for non-admins)
-    activity_data["visibility_state"] = "publish"
+    # Admins publish immediately, regular users submit for review
+    activity_data["visibility_state"] = "publish" if current_user.is_admin else "draft"
     new_activity = Activity(**activity_data, creator_id=current_user.id)
     new_activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
     db.add(new_activity)
@@ -250,6 +254,20 @@ async def _evaluate_creator_badges(user: User, db: AsyncSession):
     return new_badges
 
 
+@router.get("/admin/activities", response_model=List[ActivityOut])
+async def admin_list_activities(
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+    visibility_state: Optional[str] = None,
+):
+    """Admin view of ALL activities (drafts + published). Optional filter by visibility_state."""
+    query = select(Activity).options(selectinload(Activity.creator))
+    if visibility_state:
+        query = query.where(Activity.visibility_state == visibility_state)
+    result = await db.execute(query.order_by(Activity.id.desc()))
+    return result.scalars().all()
+
+
 @router.post("/admin/activities", response_model=ActivityOut)
 async def create_activity(
     activity_in: ActivityCreate,
@@ -322,10 +340,28 @@ async def complete_activity(
 
     if not activity:
         raise HTTPException(status_code=404, detail="Activity not found")
-        
-    # 2. Increment user completion count
-    current_user.completed_activities_count += 1
-    
+
+    # 2. Increment user completion count (or 0 guard for legacy NULL rows)
+    current_user.completed_activities_count = (current_user.completed_activities_count or 0) + 1
+
+    # 2b. Accumulate distance + calories (scientifically: MET-based formula)
+    activity_distance = float(activity.distance_km or 0)
+    current_user.total_distance_km = float(current_user.total_distance_km or 0) + activity_distance
+
+    # Look up MET for this activity's category
+    cat_result = await db.execute(select(Category).where(Category.name == activity.category))
+    category_obj = cat_result.scalars().first()
+    activity_met = category_obj.calorie_met if category_obj else None
+
+    kcal_burned = calculate_calories(
+        met=activity_met,
+        weight_kg=current_user.weight_kg,
+        duration_minutes=activity.estimated_duration_minutes,
+        sex=current_user.sex,
+        age=current_user.age,
+    )
+    current_user.total_calories_burned = float(current_user.total_calories_burned or 0) + kcal_burned
+
     # 3. Process XP + level gamification
     calc_result = process_activity_completion(
         user_xp=current_user.xp,

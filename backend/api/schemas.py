@@ -38,6 +38,8 @@ class UserOut(BaseModel):
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
     total_distance_km: Optional[float] = 0
+    total_calories_burned: Optional[float] = 0
+    completed_activities_count: Optional[int] = 0
     onboarding_complete: bool = False
     favorite_categories: Optional[List[str]] = []
 
@@ -102,6 +104,7 @@ class ActivityCreate(BaseModel):
     longitude: float
     xp_reward: Optional[int] = 50
     estimated_duration_minutes: Optional[int] = 60
+    distance_km: Optional[float] = 0
 
     # Optional map data
     route_polyline: Optional[str] = None
@@ -117,6 +120,7 @@ class ActivityUpdate(BaseModel):
     longitude: Optional[float] = None
     xp_reward: Optional[int] = None
     estimated_duration_minutes: Optional[int] = None
+    distance_km: Optional[float] = None
     route_polyline: Optional[str] = None
     map_boundaries: Optional[str] = None
     visibility_state: Optional[str] = None
@@ -145,17 +149,20 @@ class CategoryCreate(BaseModel):
     name: str
     emoji: str = "📍"
     color: str = "#4CAF50"
+    calorie_met: Optional[float] = 4.0
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = None
     emoji: Optional[str] = None
     color: Optional[str] = None
+    calorie_met: Optional[float] = None
 
 class CategoryOut(BaseModel):
     id: int
     name: str
     emoji: str
     color: str
+    calorie_met: float = 4.0
 
     class Config:
         from_attributes = True

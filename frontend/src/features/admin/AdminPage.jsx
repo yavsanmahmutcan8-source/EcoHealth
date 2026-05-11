@@ -51,6 +51,7 @@ export function AdminPage() {
   const [difficulty, setDifficulty] = useState(1);
   const [xpReward, setXpReward] = useState(50);
   const [duration, setDuration] = useState(60);
+  const [distanceKm, setDistanceKm] = useState(0);
   const [routePoints, setRoutePoints] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -58,6 +59,7 @@ export function AdminPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatEmoji, setNewCatEmoji] = useState('📍');
   const [newCatColor, setNewCatColor] = useState('#4CAF50');
+  const [newCatMet, setNewCatMet] = useState(4.0);
   const [editingCat, setEditingCat] = useState(null);
 
   useEffect(() => {
@@ -80,7 +82,10 @@ export function AdminPage() {
 
   const fetchActivities = async () => {
     try {
-      const res = await fetch('/api/activities');
+      // Admin endpoint returns ALL activities (drafts + published)
+      const res = await fetch('/api/admin/activities', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         setActivities(data);
@@ -89,6 +94,36 @@ export function AdminPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const setActivityVisibility = async (id, state) => {
+    try {
+      const res = await fetch(`/api/admin/activities/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ visibility_state: state })
+      });
+      if (!res.ok) throw new Error('Failed');
+      addToast(state === 'publish' ? 'Activity approved & published' : 'Activity moved to draft', 'success');
+      fetchActivities();
+    } catch {
+      addToast('Failed to update activity', 'error');
+    }
+  };
+
+  const deleteActivity = async (id) => {
+    if (!confirm('Delete this activity permanently?')) return;
+    try {
+      const res = await fetch(`/api/admin/activities/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed');
+      addToast('Activity deleted', 'info');
+      fetchActivities();
+    } catch {
+      addToast('Failed to delete activity', 'error');
     }
   };
 
@@ -137,6 +172,7 @@ export function AdminPage() {
           longitude: routePoints[0][1],
           xp_reward: parseInt(xpReward),
           estimated_duration_minutes: parseInt(duration),
+          distance_km: parseFloat(distanceKm) || 0,
           route_polyline: JSON.stringify(routePoints),
           visibility_state: 'publish'
         })
@@ -183,7 +219,11 @@ export function AdminPage() {
               <div style={{ overflowX: 'auto' }}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>ID</th><th>Username</th><th>Email</th><th>Role</th><th>Level</th><th>XP</th></tr>
+                    <tr>
+                      <th>ID</th><th>Username</th><th>Email</th><th>Role</th>
+                      <th>Lvl</th><th>XP</th>
+                      <th>Age</th><th>Sex</th><th>Weight (kg)</th><th>Height (cm)</th><th>Fitness</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
@@ -202,6 +242,11 @@ export function AdminPage() {
                         <td><span style={{ padding: '2px 8px', borderRadius: '12px', background: u.is_admin ? '#4CAF50' : '#e0e0e0', color: u.is_admin ? '#fff' : '#333', fontSize: '0.8rem', fontWeight: u.is_admin ? 'bold' : 'normal' }}>{u.is_admin ? 'Admin' : 'User'}</span></td>
                         <td>{u.level}</td>
                         <td>{u.xp}</td>
+                        <td>{u.age ?? '—'}</td>
+                        <td>{u.sex || '—'}</td>
+                        <td>{u.weight_kg ?? '—'}</td>
+                        <td>{u.height_cm ?? '—'}</td>
+                        <td>{u.fitness_level || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -224,13 +269,38 @@ export function AdminPage() {
               <div style={{ overflowX: 'auto', marginTop: '1rem' }}>
                 <table className={styles.table}>
                   <thead>
-                    <tr><th>ID</th><th>Title</th><th>Category</th><th>XP</th><th>Status</th></tr>
+                    <tr>
+                      <th>ID</th><th>Title</th><th>Category</th><th>Creator</th><th>XP</th><th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
                   </thead>
                   <tbody>
                     {activities.map(a => (
                       <tr key={a.id}>
-                        <td>{a.id}</td><td>{a.title}</td><td>{a.category}</td><td>{a.xp_reward || 50}</td>
+                        <td>{a.id}</td>
+                        <td>{a.title}</td>
+                        <td>{a.category}</td>
+                        <td>
+                          {a.creator_username ? (
+                            <span>
+                              @{a.creator_username}
+                              {a.creator_is_admin && <span style={{ marginLeft: 4, fontSize: '0.7rem' }}>🏛️</span>}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td>{a.xp_reward || 50}</td>
                         <td><span style={{ padding: '2px 8px', borderRadius: '12px', background: a.visibility_state === 'publish' ? '#4CAF50' : '#FFC107', color: '#fff', fontSize: '0.8rem' }}>{a.visibility_state || 'publish'}</span></td>
+                        <td style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                            {a.visibility_state !== 'publish' && (
+                              <Button variant="primary" onClick={() => setActivityVisibility(a.id, 'publish')} style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}>Approve</Button>
+                            )}
+                            {a.visibility_state === 'publish' && (
+                              <Button variant="secondary" onClick={() => setActivityVisibility(a.id, 'draft')} style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}>Unpublish</Button>
+                            )}
+                            <button onClick={() => deleteActivity(a.id)} style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer', padding: '4px' }} title="Delete"><Trash2 size={16} /></button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -273,6 +343,10 @@ export function AdminPage() {
                   <input type="number" className={styles.input} value={duration} onChange={e => setDuration(e.target.value)} required />
                 </div>
               </div>
+              <div className={styles.formGroup}>
+                <label>Distance (km)</label>
+                <input type="number" step="0.1" min="0" className={styles.input} value={distanceKm} onChange={e => setDistanceKm(e.target.value)} placeholder="e.g. 3.5" />
+              </div>
               
               <div className={styles.formGroup}>
                 <label>Draw Route (Click to place start point and path markers)</label>
@@ -309,14 +383,14 @@ export function AdminPage() {
                 const res = await fetch(url, {
                   method,
                   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify({ name: newCatName, emoji: newCatEmoji, color: newCatColor })
+                  body: JSON.stringify({ name: newCatName, emoji: newCatEmoji, color: newCatColor, calorie_met: parseFloat(newCatMet) || 4.0 })
                 });
                 if (!res.ok) {
                   const err = await res.json().catch(() => ({}));
                   throw new Error(err.detail || 'Failed');
                 }
                 addToast(editingCat ? 'Category updated!' : 'Category created!', 'success');
-                setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setEditingCat(null);
+                setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); setEditingCat(null);
                 fetchCategories();
               } catch (err) {
                 addToast(err.message, 'error');
@@ -334,11 +408,15 @@ export function AdminPage() {
                 <label>Color</label>
                 <input type="color" className={styles.input} value={newCatColor} onChange={e => setNewCatColor(e.target.value)} style={{ padding: '4px', height: '42px' }} />
               </div>
+              <div className={styles.formGroup} style={{ flex: 0.8, minWidth: '90px', marginBottom: 0 }}>
+                <label title="Metabolic Equivalent of Task — controls calorie burn (yoga ~2.5, walking ~3.5, running ~9.8)">MET</label>
+                <input type="number" step="0.1" min="1" max="20" className={styles.input} value={newCatMet} onChange={e => setNewCatMet(e.target.value)} />
+              </div>
               <Button variant="primary" type="submit" style={{ minWidth: '110px' }}>
                 <Plus size={16} style={{ marginRight: '0.3rem' }} /> {editingCat ? 'Update' : 'Add'}
               </Button>
               {editingCat && (
-                <Button variant="secondary" onClick={() => { setEditingCat(null); setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); }} style={{ minWidth: '80px' }}>Cancel</Button>
+                <Button variant="secondary" onClick={() => { setEditingCat(null); setNewCatName(''); setNewCatEmoji('📍'); setNewCatColor('#4CAF50'); setNewCatMet(4.0); }} style={{ minWidth: '80px' }}>Cancel</Button>
               )}
             </form>
 
@@ -346,7 +424,7 @@ export function AdminPage() {
             <div style={{ overflowX: 'auto' }}>
               <table className={styles.table}>
                 <thead>
-                  <tr><th>Emoji</th><th>Name</th><th>Color</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
+                  <tr><th>Emoji</th><th>Name</th><th>Color</th><th title="Metabolic Equivalent of Task">MET</th><th style={{ textAlign: 'right' }}>Actions</th></tr>
                 </thead>
                 <tbody>
                   {categories.map(c => (
@@ -354,9 +432,10 @@ export function AdminPage() {
                       <td style={{ fontSize: '1.5rem' }}>{c.emoji}</td>
                       <td>{c.name}</td>
                       <td><span style={{ display: 'inline-block', width: 20, height: 20, borderRadius: '50%', background: c.color, verticalAlign: 'middle' }}></span></td>
+                      <td>{c.calorie_met ?? 4.0}</td>
                       <td style={{ textAlign: 'right' }}>
                         <div style={{ display: 'inline-flex', gap: '0.5rem' }}>
-                          <button onClick={() => { setEditingCat(c); setNewCatName(c.name); setNewCatEmoji(c.emoji); setNewCatColor(c.color); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Edit"><Edit3 size={16} /></button>
+                          <button onClick={() => { setEditingCat(c); setNewCatName(c.name); setNewCatEmoji(c.emoji); setNewCatColor(c.color); setNewCatMet(c.calorie_met ?? 4.0); }} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: '4px', minHeight: 'unset' }} title="Edit"><Edit3 size={16} /></button>
                           <button onClick={async () => {
                             if (!confirm(`Delete category "${c.name}"?`)) return;
                             await fetch(`/api/admin/categories/${c.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
@@ -368,7 +447,7 @@ export function AdminPage() {
                     </tr>
                   ))}
                   {categories.length === 0 && (
-                    <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No categories yet. Create one above!</td></tr>
+                    <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '2rem' }}>No categories yet. Create one above!</td></tr>
                   )}
                 </tbody>
               </table>

@@ -133,3 +133,29 @@ a:hover {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/*
+ * Leaflet z-index fix.
+ * Leaflet's default tile/control layers ride at 200-800, which collides with our
+ * sticky Navbar (z-index: 40) and search dropdowns (z-index: 50). Pin every
+ * leaflet layer well below the navbar so maps never overlap top chrome.
+ */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  z-index: 1 !important;
+}
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 2 !important;
+}
+.leaflet-container {
+  z-index: 0;
+}

@@ -156,7 +156,7 @@ export function DashboardPage() {
           <Card className={styles.statCard}>
             <Activity className={styles.statIcon} color="var(--color-primary)" />
             <div className={styles.statInfo}>
-              <h3>{user.stats.distance} mi</h3>
+              <h3>{Number(user.stats.distance || 0).toFixed(1)} km</h3>
               <p>Distance Logged</p>
             </div>
           </Card>

@@ -47,6 +47,7 @@ export function CreateActivityPage() {
   const [difficulty, setDifficulty] = useState(3);
   const [xpReward, setXpReward] = useState(50);
   const [duration, setDuration] = useState(60);
+  const [distanceKm, setDistanceKm] = useState(0);
   const [routePoints, setRoutePoints] = useState([]);
   const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -99,8 +100,8 @@ export function CreateActivityPage() {
           longitude: routePoints[0][1],
           xp_reward: parseInt(xpReward, 10),
           estimated_duration_minutes: parseInt(duration, 10),
+          distance_km: parseFloat(distanceKm) || 0,
           route_polyline: JSON.stringify(routePoints),
-          visibility_state: 'publish',
         }),
       });
 
@@ -109,7 +110,12 @@ export function CreateActivityPage() {
         throw new Error(err.detail || 'Failed to create activity');
       }
 
-      addToast('Activity published! 🎉', 'success');
+      // Backend forces draft state for non-admin submissions
+      if (user?.is_admin) {
+        addToast('Activity published! 🎉', 'success');
+      } else {
+        addToast('Submitted for admin review. You will see it published once approved.', 'success');
+      }
       navigate('/explore');
     } catch (err) {
       addToast(err.message || 'Could not create activity.', 'error');
@@ -194,6 +200,16 @@ export function CreateActivityPage() {
               />
             </div>
 
+            <Input
+              label="Distance (km)"
+              type="number"
+              min="0"
+              step="0.1"
+              value={distanceKm}
+              onChange={e => setDistanceKm(e.target.value)}
+              placeholder="e.g. 3.5"
+            />
+
             <div className={styles.field}>
               <label>
                 <MapPin size={14} style={{ verticalAlign: 'middle', marginRight: 4 }} />
@@ -216,8 +232,13 @@ export function CreateActivityPage() {
               </div>
             </div>
 
+            {!user?.is_admin && (
+              <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.5rem' }}>
+                ℹ️ Routes submitted by community members are reviewed by an admin before going live.
+              </p>
+            )}
             <Button type="submit" variant="primary" isLoading={isSubmitting}>
-              Publish Activity
+              {user?.is_admin ? 'Publish Activity' : 'Submit for Review'}
             </Button>
           </form>
         </Card>

@@ -30,6 +30,7 @@ class User(Base):
     badges = Column(JSON, default=list)
     completed_activities_count = Column(Integer, default=0)
     total_distance_km = Column(Float, default=0)
+    total_calories_burned = Column(Float, default=0, server_default="0")
 
     # Creator metrics (Phase 12)
     creator_completions_count = Column(Integer, default=0, server_default="0")

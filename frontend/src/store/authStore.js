@@ -142,9 +142,9 @@ export const useAuthStore = create(
             onboarding_complete: !!rawUser.onboarding_complete,
             favorite_categories: rawUser.favorite_categories || [],
             stats: {
-              trails: 0,
+              trails: rawUser.completed_activities_count ?? 0,
               distance: rawUser.total_distance_km ?? 0,
-              calories: '0',
+              calories: Math.round(rawUser.total_calories_burned ?? 0),
               gold_badges: (rawUser.badges || []).length
             },
             badges: rawUser.badges || [],
