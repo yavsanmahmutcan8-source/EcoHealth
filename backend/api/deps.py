@@ -30,6 +30,14 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
     
     if user is None:
         raise credentials_exception
+    # Banned users can authenticate against the token but every API call is
+    # rejected so they can't post reviews, file reports, create activities,
+    # etc. The frontend force-logs-them-out when it sees a 403 here.
+    if getattr(user, "is_banned", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is banned",
+        )
     return user
 
 async def get_current_active_admin(current_user: User = Depends(get_current_user)):

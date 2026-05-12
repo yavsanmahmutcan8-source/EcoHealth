@@ -14,6 +14,10 @@ class Activity(Base):
     
     creator_id = Column(Integer, ForeignKey("user.id"), nullable=True)
     creator = relationship("User", back_populates="activities")
+
+    # Reports and admin feedback (Phase 15)
+    reports = relationship("ActivityReport", back_populates="activity", cascade="all, delete-orphan")
+    feedback_entries = relationship("ActivityFeedback", back_populates="activity", cascade="all, delete-orphan", order_by="ActivityFeedback.created_at.desc()")
     
     # Advanced Map Data
     route_polyline = Column(Text, nullable=True) # Encoded polyline string
@@ -30,6 +34,11 @@ class Activity(Base):
 
     is_verified_route = Column(Boolean, default=False)
     visibility_state = Column(String, default="publish") # "draft", "publish"
+
+    # Review pipeline state. NULL for legacy/admin-published items.
+    # "pending_review"      → user submitted for review (still in draft visibility)
+    # "changes_requested"   → admin sent feedback, awaiting creator edit
+    submission_status = Column(String, nullable=True)
 
     @property
     def latitude(self):

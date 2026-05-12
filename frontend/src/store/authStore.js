@@ -153,6 +153,11 @@ export const useAuthStore = create(
             get().forceLogout('fetchUser 401');
             return;
           }
+          if (response.status === 403) {
+            // Banned-user enforcement (backend deps.get_current_user)
+            get().forceLogout('account banned');
+            return;
+          }
           if (!response.ok) {
             set({ user: null, token: null, tokenIssuedAt: null });
             throw new Error('Session expired');

@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Search, Map, Loader, Play } from 'lucide-react';
+import { Search, Map, Loader, Play, Flag } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { Modal } from '../../components/ui/Modal';
 import { ActivityReviews } from '../../components/ui/ActivityReviews';
+import { ReportModal } from '../../components/ui/ReportModal';
 import { useActivitySessionStore } from '../../store/activitySessionStore';
+import { useAuthStore } from '../../store/authStore';
 import styles from './ExplorePage.module.css';
 
 // Fix leaflet marker icon paths
@@ -46,8 +48,10 @@ export function ExplorePage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [previewActivity, setPreviewActivity] = useState(null);
+  const [reportTarget, setReportTarget] = useState(null);
   const [mapCenter, setMapCenter] = useState([39.92077, 32.85411]);
   const { startActivity, activeActivity, sessionState } = useActivitySessionStore();
+  const token = useAuthStore(s => s.token);
 
   // Build emoji lookup from categories
   const emojiMap = {};
@@ -279,8 +283,8 @@ export function ExplorePage() {
                 ⚠️ You already have an active activity. Complete or abandon it first.
               </p>
             ) : (
-              <Button 
-                variant="primary" 
+              <Button
+                variant="primary"
                 style={{ width: '100%' }}
                 onClick={() => {
                   startActivity(previewActivity);
@@ -292,11 +296,27 @@ export function ExplorePage() {
               </Button>
             )}
 
+            {token && (
+              <button
+                type="button"
+                onClick={() => setReportTarget({ kind: 'activity', id: previewActivity.id, label: previewActivity.title })}
+                style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <Flag size={13} /> Report this activity
+              </button>
+            )}
+
             {/* Reviews section */}
             <ActivityReviews activityId={previewActivity.id} />
           </div>
         )}
       </Modal>
+
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={() => setReportTarget(null)}
+        target={reportTarget}
+      />
     </div>
   );
 }

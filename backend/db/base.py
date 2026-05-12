@@ -8,3 +8,5 @@ from models.review import Review
 from models.badge_definition import BadgeDefinition
 from models.completion_log import CompletionLog
 from models.notification import Notification
+from models.activity_feedback import ActivityFeedback
+from models.report import ActivityReport, UserReport

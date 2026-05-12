@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -6,7 +7,7 @@ import { Modal } from '../../components/ui/Modal';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import styles from './ProfilePage.module.css';
-import { User, Camera, Edit3, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Camera, Edit3, Save, ChevronDown, ChevronUp, MapPin, Clock, AlertCircle } from 'lucide-react';
 
 const FITNESS_LEVELS = [
   { id: 'beginner', label: 'Beginner', emoji: '🌱' },
@@ -16,6 +17,7 @@ const FITNESS_LEVELS = [
 ];
 
 export function ProfilePage() {
+  const navigate = useNavigate();
   const user = useAuthStore(state => state.user);
   const token = useAuthStore(state => state.token);
   const fetchUser = useAuthStore(state => state.fetchUser);
@@ -26,6 +28,8 @@ export function ProfilePage() {
   const [progress, setProgress] = useState({});
   const [categories, setCategories] = useState([]);
   const [editOpen, setEditOpen] = useState(false);
+  const [mySubmissions, setMySubmissions] = useState([]);
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
 
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
@@ -52,8 +56,29 @@ export function ProfilePage() {
       fetch('/api/users/me/badge-progress', {
         headers: { 'Authorization': `Bearer ${token}` }
       }).then(r => r.ok ? r.json() : {}).then(setProgress).catch(() => {});
+
+      setSubmissionsLoading(true);
+      fetch('/api/users/me/activities', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }).then(r => r.ok ? r.json() : [])
+        .then(setMySubmissions)
+        .catch(() => {})
+        .finally(() => setSubmissionsLoading(false));
     }
   }, [token]);
+
+  const statusPill = (a) => {
+    if (a.submission_status === 'changes_requested') {
+      return { label: '📝 Changes requested', bg: 'rgba(255,193,7,0.15)', color: '#b8860b', border: 'rgba(255,193,7,0.5)' };
+    }
+    if (a.submission_status === 'pending_review') {
+      return { label: '⏳ Awaiting review', bg: 'rgba(33,150,243,0.15)', color: '#1976d2', border: 'rgba(33,150,243,0.5)' };
+    }
+    if (a.visibility_state === 'draft') {
+      return { label: '📄 Draft', bg: 'rgba(150,150,150,0.15)', color: '#666', border: 'rgba(150,150,150,0.5)' };
+    }
+    return { label: '✅ Published', bg: 'rgba(76,175,80,0.15)', color: '#388e3c', border: 'rgba(76,175,80,0.5)' };
+  };
 
   useEffect(() => {
     if (user) {
@@ -183,6 +208,65 @@ export function ProfilePage() {
             </button>
           </div>
         </div>
+
+        <section style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0 }}>My Submissions</h2>
+            <Button variant="secondary" onClick={() => navigate('/create')}>+ New Route</Button>
+          </div>
+          <p className={styles.subtitle} style={{ marginTop: 0, marginBottom: '0.75rem' }}>
+            Routes you've designed. Admin-reviewed before going live.
+          </p>
+          {submissionsLoading ? (
+            <p style={{ color: 'var(--color-text-muted)' }}>Loading…</p>
+          ) : mySubmissions.length === 0 ? (
+            <Card>
+              <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+                You haven't created any routes yet. <button onClick={() => navigate('/create')} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, font: 'inherit' }}>Design your first route →</button>
+              </p>
+            </Card>
+          ) : (
+            <div style={{ display: 'grid', gap: '0.6rem' }}>
+              {mySubmissions.map(a => {
+                const pill = statusPill(a);
+                const needsAttention = a.submission_status === 'changes_requested';
+                return (
+                  <Card key={a.id} style={{ borderColor: needsAttention ? 'rgba(255,193,7,0.5)' : undefined }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 200 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                          <strong style={{ fontSize: '1rem' }}>{a.title}</strong>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, padding: '0.15rem 0.5rem', borderRadius: 999, background: pill.bg, color: pill.color, border: `1px solid ${pill.border}` }}>
+                            {pill.label}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                          <span><MapPin size={12} style={{ verticalAlign: 'middle' }} /> {a.category}</span>
+                          <span>Diff {a.difficulty}/5</span>
+                          <span><Clock size={12} style={{ verticalAlign: 'middle' }} /> ~{a.estimated_duration_minutes || 60} min</span>
+                          <span>+{a.xp_reward || 50} XP</span>
+                        </div>
+                        {needsAttention && (
+                          <p style={{ fontSize: '0.8rem', color: '#b8860b', margin: '0.5rem 0 0', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <AlertCircle size={13} /> Admin requested changes — open to view feedback and resubmit.
+                          </p>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem' }}>
+                        <Button
+                          variant={needsAttention ? 'primary' : 'secondary'}
+                          onClick={() => navigate(`/create?edit=${a.id}`)}
+                        >
+                          {needsAttention ? 'Fix & Resubmit' : 'Edit'}
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </section>
 
         <section className={styles.badgesSection}>
           <h2>Badge Gallery</h2>

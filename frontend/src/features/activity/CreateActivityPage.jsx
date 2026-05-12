@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -38,11 +38,16 @@ function MapFlyTo({ target }) {
 
 export function CreateActivityPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+  const isEditMode = !!editId;
   const token = useAuthStore(state => state.token);
   const user = useAuthStore(state => state.user);
   const addToast = useToastStore(state => state.addToast);
 
   const [categories, setCategories] = useState([]);
+  const [feedbackEntries, setFeedbackEntries] = useState([]);
+  const [submissionStatus, setSubmissionStatus] = useState(null);
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [difficulty, setDifficulty] = useState(3);
@@ -82,17 +87,52 @@ export function CreateActivityPage() {
       .then(r => r.ok ? r.json() : [])
       .then(data => {
         setCategories(data);
-        if (data.length > 0) setCategory(data[0].name);
+        if (!isEditMode && data.length > 0) setCategory(data[0].name);
       })
       .catch(() => {});
 
-    if (navigator.geolocation) {
+    if (!isEditMode && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setMapCenter([pos.coords.latitude, pos.coords.longitude]),
         () => {}
       );
     }
-  }, []);
+  }, [isEditMode]);
+
+  // Edit mode: prefill from existing activity + load admin feedback
+  useEffect(() => {
+    if (!isEditMode || !token) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/activities/${editId}`);
+        if (!res.ok) throw new Error('Could not load activity');
+        const a = await res.json();
+        if (cancelled) return;
+        setTitle(a.title || '');
+        setCategory(a.category || '');
+        setDifficulty(a.difficulty || 3);
+        setXpReward(a.xp_reward || 50);
+        setDuration(a.estimated_duration_minutes || 60);
+        setIsLoop(!!a.is_loop);
+        setLapCount(a.lap_count || 1);
+        setSubmissionStatus(a.submission_status || null);
+        let pts = [];
+        try { pts = a.route_polyline ? JSON.parse(a.route_polyline) : []; } catch { pts = []; }
+        setRoutePoints(pts);
+        if (pts.length > 0) setMapCenter(pts[0]);
+      } catch (err) {
+        addToast(err.message || 'Failed to load activity for edit', 'error');
+        navigate('/profile');
+      }
+    })();
+    // Load admin feedback history
+    fetch(`/api/activities/${editId}/feedback`, { headers: { 'Authorization': `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { if (!cancelled) setFeedbackEntries(d); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isEditMode, editId, token, addToast, navigate]);
 
   // When category changes to a non-distance one, reset loop/lap to defaults
   useEffect(() => {
@@ -157,40 +197,47 @@ export function CreateActivityPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/activities', {
-        method: 'POST',
+      const payload = {
+        title: title.trim(),
+        category,
+        difficulty: parseInt(difficulty, 10),
+        latitude: routePoints[0][0],
+        longitude: routePoints[0][1],
+        xp_reward: parseInt(xpReward, 10),
+        estimated_duration_minutes: parseInt(duration, 10),
+        distance_km: requiresDistance ? Number(computedDistanceKm.toFixed(3)) : 0,
+        is_loop: requiresDistance ? isLoop : false,
+        lap_count: requiresDistance && isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1,
+        route_polyline: JSON.stringify(routePoints),
+      };
+      const url = isEditMode ? `/api/activities/${editId}` : '/api/activities';
+      const method = isEditMode ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          title: title.trim(),
-          category,
-          difficulty: parseInt(difficulty, 10),
-          latitude: routePoints[0][0],
-          longitude: routePoints[0][1],
-          xp_reward: parseInt(xpReward, 10),
-          estimated_duration_minutes: parseInt(duration, 10),
-          distance_km: requiresDistance ? Number(computedDistanceKm.toFixed(3)) : 0,
-          is_loop: requiresDistance ? isLoop : false,
-          lap_count: requiresDistance && isLoop ? Math.max(1, parseInt(lapCount, 10) || 1) : 1,
-          route_polyline: JSON.stringify(routePoints),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to create activity');
+        throw new Error(err.detail || (isEditMode ? 'Failed to update activity' : 'Failed to create activity'));
       }
 
-      if (user?.is_admin) {
+      if (isEditMode) {
+        addToast(user?.is_admin ? 'Activity updated 🎉' : 'Resubmitted for admin review.', 'success');
+        navigate('/profile');
+      } else if (user?.is_admin) {
         addToast('Activity published! 🎉', 'success');
+        navigate('/explore');
       } else {
         addToast('Submitted for admin review. You will see it published once approved.', 'success');
+        navigate('/explore');
       }
-      navigate('/explore');
     } catch (err) {
-      addToast(err.message || 'Could not create activity.', 'error');
+      addToast(err.message || 'Could not save activity.', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -207,9 +254,32 @@ export function CreateActivityPage() {
         </button>
 
         <div className={styles.header}>
-          <h1 className="gradient-text">Design a Route</h1>
-          <p>Share a trail, park loop, or adventure with the EcoHealth community. You'll earn XP every time someone completes it!</p>
+          <h1 className="gradient-text">{isEditMode ? 'Edit Route' : 'Design a Route'}</h1>
+          <p>
+            {isEditMode
+              ? 'Update your route and resubmit it for admin review.'
+              : "Share a trail, park loop, or adventure with the EcoHealth community. You'll earn XP every time someone completes it!"}
+          </p>
         </div>
+
+        {isEditMode && submissionStatus === 'changes_requested' && feedbackEntries.length > 0 && (
+          <Card style={{ marginBottom: '1rem', background: 'rgba(255,193,7,0.10)', border: '1px solid rgba(255,193,7,0.4)' }}>
+            <h3 style={{ margin: '0 0 0.5rem 0', color: 'var(--color-text)' }}>📝 Admin requested changes</h3>
+            <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              Address the feedback below, then save to resubmit.
+            </p>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: '0.5rem' }}>
+              {feedbackEntries.map(fb => (
+                <li key={fb.id} style={{ padding: '0.6rem 0.75rem', background: 'var(--glass-bg)', borderRadius: '8px', border: '1px solid var(--glass-border)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
+                    {fb.admin_username ? `@${fb.admin_username}` : 'Admin'} · {fb.created_at ? new Date(fb.created_at).toLocaleString() : ''}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>{fb.message}</div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         <Card className={styles.formCard}>
           <form onSubmit={handleSubmit} className={styles.form}>
@@ -375,7 +445,9 @@ export function CreateActivityPage() {
               </p>
             )}
             <Button type="submit" variant="primary" isLoading={isSubmitting}>
-              {user?.is_admin ? 'Publish Activity' : 'Submit for Review'}
+              {isEditMode
+                ? (user?.is_admin ? 'Save Changes' : 'Save & Resubmit for Review')
+                : (user?.is_admin ? 'Publish Activity' : 'Submit for Review')}
             </Button>
           </form>
         </Card>

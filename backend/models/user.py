@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, Text
+from sqlalchemy import Column, Integer, String, Float, Boolean, JSON, Text, DateTime
 from sqlalchemy.orm import relationship
 from db.base_class import Base
 
@@ -37,7 +37,20 @@ class User(Base):
 
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
-    
+
+    # Moderation state (Phase 15). Banned users can't log in / create / report.
+    is_banned = Column(Boolean, default=False, nullable=False, server_default="false")
+    banned_at = Column(DateTime(timezone=True), nullable=True)
+    ban_reason = Column(Text, nullable=True)
+
     activities = relationship("Activity", back_populates="creator")
     reviews = relationship("Review", back_populates="user")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    # Reports filed against this user. `foreign_keys` disambiguates from the
+    # reporter_id / resolved_by_id FKs which also point at user.id.
+    reports_received = relationship(
+        "UserReport",
+        back_populates="reported_user",
+        foreign_keys="UserReport.reported_user_id",
+        cascade="all, delete-orphan",
+    )

@@ -17,6 +17,9 @@ from models.review import Review
 from models.badge_definition import BadgeDefinition
 from models.completion_log import CompletionLog
 from models.notification import Notification, NotificationType
+from models.activity_feedback import ActivityFeedback
+from models.report import ActivityReport, UserReport, ReportStatus
+from datetime import datetime, timezone
 from core.security import verify_password, get_password_hash, create_access_token
 from api.deps import get_current_user, get_current_active_admin
 from api.schemas import (
@@ -24,7 +27,11 @@ from api.schemas import (
     ActivityCompletionBody, ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
     ReviewCreate, ReviewOut, ProfileUpdate, InterestsUpdate,
     BadgeDefinitionCreate, BadgeDefinitionUpdate, BadgeDefinitionOut, NotificationOut,
-    PublicUserOut, UserSearchOut
+    PublicUserOut, UserSearchOut,
+    ActivityFeedbackCreate, ActivityFeedbackOut, BulkActivityAction, BulkActionResult,
+    ActivityReportCreate, UserReportCreate, ReportResolve,
+    ActivityReportOut, UserReportOut, ReportedActivitySummary, ReportedUserSummary,
+    AdminWarnBody, AdminBanBody,
 )
 from services.recommendation import generate_match_scores
 from services.gamification import process_activity_completion
@@ -69,6 +76,9 @@ async def create_user_activity(
     activity_data = activity_in.dict(exclude={"latitude", "longitude"})
     # Admins publish immediately, regular users submit for review
     activity_data["visibility_state"] = "publish" if current_user.is_admin else "draft"
+    # Non-admin submissions enter the review pipeline as 'pending_review'.
+    if not current_user.is_admin:
+        activity_data["submission_status"] = "pending_review"
     new_activity = Activity(**activity_data, creator_id=current_user.id)
     new_activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
     db.add(new_activity)
@@ -121,7 +131,9 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSessi
     
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-        
+    if getattr(user, "is_banned", False):
+        raise HTTPException(status_code=403, detail="This account has been banned.")
+
     access_token = create_access_token(data={"sub": user.username})
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -259,13 +271,32 @@ async def admin_list_activities(
     current_admin: User = Depends(get_current_active_admin),
     db: AsyncSession = Depends(get_db),
     visibility_state: Optional[str] = None,
+    submission_status: Optional[str] = None,
 ):
-    """Admin view of ALL activities (drafts + published). Optional filter by visibility_state."""
+    """Admin view of ALL activities (drafts + published). Optional filter by
+    visibility_state and/or submission_status."""
     query = select(Activity).options(selectinload(Activity.creator))
     if visibility_state:
         query = query.where(Activity.visibility_state == visibility_state)
+    if submission_status:
+        query = query.where(Activity.submission_status == submission_status)
     result = await db.execute(query.order_by(Activity.id.desc()))
-    return result.scalars().all()
+    activities = result.scalars().all()
+
+    # Attach report_count for each activity (single grouped query)
+    if activities:
+        ids = [a.id for a in activities]
+        counts_q = (
+            select(ActivityReport.activity_id, sa_func.count(ActivityReport.id))
+            .where(ActivityReport.activity_id.in_(ids))
+            .group_by(ActivityReport.activity_id)
+        )
+        counts = {row[0]: row[1] for row in (await db.execute(counts_q)).all()}
+        for a in activities:
+            # report_count is a column on the schema but not the model — Pydantic
+            # picks it up from the attribute we set here.
+            setattr(a, "report_count", counts.get(a.id, 0))
+    return activities
 
 
 @router.post("/admin/activities", response_model=ActivityOut)
@@ -669,6 +700,22 @@ async def create_review(
         created_at=new_review.created_at,
         username=current_user.username
     )
+
+@router.get("/activities/{activity_id}", response_model=ActivityOut)
+async def get_activity_detail(
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Public single-activity fetch. Used by creator edit flow to prefill
+    the route designer with the saved values."""
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return activity
+
 
 @router.get("/activities/{activity_id}/reviews", response_model=List[ReviewOut])
 async def get_reviews(
@@ -1141,3 +1188,601 @@ async def mark_notification_read(
     await db.refresh(notif)
     return notif
 
+
+# ============================================================================
+# Phase 15: bulk admin actions, review-feedback loop, reports + moderation
+# ============================================================================
+
+# ---------- Bulk admin actions on activities --------------------------------
+
+@router.post("/admin/activities/bulk", response_model=BulkActionResult)
+async def admin_bulk_activity_action(
+    body: BulkActivityAction,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk publish / draft / delete a set of activities by id."""
+    if not body.ids:
+        return {"affected": 0, "action": body.action}
+    action = (body.action or "").lower()
+
+    if action == "delete":
+        result = await db.execute(select(Activity).where(Activity.id.in_(body.ids)))
+        rows = result.scalars().all()
+        for a in rows:
+            await db.delete(a)
+        await db.commit()
+        return {"affected": len(rows), "action": action}
+
+    if action in ("publish", "draft"):
+        new_state = "publish" if action == "publish" else "draft"
+        result = await db.execute(select(Activity).where(Activity.id.in_(body.ids)))
+        rows = result.scalars().all()
+        for a in rows:
+            a.visibility_state = new_state
+            # Publishing clears any pending review state.
+            if new_state == "publish":
+                a.submission_status = None
+        await db.commit()
+        return {"affected": len(rows), "action": action}
+
+    raise HTTPException(status_code=400, detail="Unknown bulk action")
+
+
+# ---------- Activity feedback (admin -> creator) ---------------------------
+
+@router.post("/admin/activities/{activity_id}/feedback", response_model=ActivityFeedbackOut)
+async def admin_send_activity_feedback(
+    activity_id: int,
+    body: ActivityFeedbackCreate,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin posts a feedback message on an activity. The activity is moved
+    to 'changes_requested' state and the creator gets an in-app notification."""
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    fb = ActivityFeedback(
+        activity_id=activity_id,
+        admin_id=current_admin.id,
+        message=body.message.strip(),
+    )
+    db.add(fb)
+
+    # Mark the activity so the creator sees it needs changes.
+    activity.submission_status = "changes_requested"
+    # Force back to draft so it's not publicly visible while changes are pending.
+    activity.visibility_state = "draft"
+
+    if activity.creator_id and activity.creator_id != current_admin.id:
+        db.add(Notification(
+            user_id=activity.creator_id,
+            type=NotificationType.ACTIVITY_FEEDBACK,
+            title="Activity feedback received",
+            message=f"Admin left feedback on '{activity.title}': {body.message.strip()[:160]}",
+        ))
+
+    await db.commit()
+    await db.refresh(fb)
+    return {
+        "id": fb.id,
+        "activity_id": fb.activity_id,
+        "admin_id": fb.admin_id,
+        "admin_username": current_admin.username,
+        "message": fb.message,
+        "created_at": fb.created_at,
+    }
+
+
+@router.get("/activities/{activity_id}/feedback", response_model=List[ActivityFeedbackOut])
+async def list_activity_feedback(
+    activity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Creator (or admin) reads feedback messages on an activity."""
+    act_result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    activity = act_result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if not current_user.is_admin and activity.creator_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    fb_result = await db.execute(
+        select(ActivityFeedback)
+        .where(ActivityFeedback.activity_id == activity_id)
+        .order_by(ActivityFeedback.created_at.desc())
+    )
+    rows = fb_result.scalars().all()
+
+    # Hydrate admin usernames in one extra query
+    admin_ids = list({r.admin_id for r in rows})
+    admins_map = {}
+    if admin_ids:
+        a_result = await db.execute(select(User).where(User.id.in_(admin_ids)))
+        admins_map = {u.id: u.username for u in a_result.scalars().all()}
+
+    return [
+        {
+            "id": r.id,
+            "activity_id": r.activity_id,
+            "admin_id": r.admin_id,
+            "admin_username": admins_map.get(r.admin_id),
+            "message": r.message,
+            "created_at": r.created_at,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/users/me/activities", response_model=List[ActivityOut])
+async def list_my_activities(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Creator-facing list of every activity I created, regardless of
+    visibility_state/submission_status. Used to surface 'changes requested'
+    items on the dashboard."""
+    q = (
+        select(Activity)
+        .options(selectinload(Activity.creator))
+        .where(Activity.creator_id == current_user.id)
+        .order_by(Activity.id.desc())
+    )
+    rows = (await db.execute(q)).scalars().all()
+    return rows
+
+
+@router.put("/activities/{activity_id}", response_model=ActivityOut)
+async def update_my_activity(
+    activity_id: int,
+    activity_in: ActivityUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Creator updates their own activity. Non-admin callers cannot change
+    visibility_state/submission_status directly — those are managed by the
+    review pipeline (resubmit / admin feedback). Editing automatically flips
+    the activity back to 'pending_review' so the admin sees the new version."""
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    update_data = activity_in.dict(exclude={"latitude", "longitude"}, exclude_unset=True)
+    # Strip fields non-admins shouldn't be able to set directly.
+    if not current_user.is_admin:
+        update_data.pop("visibility_state", None)
+        update_data.pop("submission_status", None)
+    for key, value in update_data.items():
+        setattr(activity, key, value)
+
+    if activity_in.latitude is not None and activity_in.longitude is not None:
+        activity.location = f"SRID=4326;POINT({activity_in.longitude} {activity_in.latitude})"
+
+    # Editing an activity that was awaiting changes re-enters the review queue.
+    if not current_user.is_admin:
+        activity.submission_status = "pending_review"
+        activity.visibility_state = "draft"
+
+    await db.commit()
+    await db.refresh(activity)
+    return activity
+
+
+@router.post("/activities/{activity_id}/resubmit", response_model=ActivityOut)
+async def resubmit_activity_for_review(
+    activity_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Creator marks their activity as ready for re-review after addressing
+    admin feedback. Flips submission_status back to 'pending_review'."""
+    result = await db.execute(
+        select(Activity).options(selectinload(Activity.creator)).where(Activity.id == activity_id)
+    )
+    activity = result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if activity.creator_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    activity.submission_status = "pending_review"
+    activity.visibility_state = "draft"
+    await db.commit()
+    await db.refresh(activity)
+    return activity
+
+
+# ---------- User-facing report endpoints -----------------------------------
+
+VALID_REPORT_REASONS = {
+    "dangerous_route", "out_of_date", "does_not_exist",
+    "spam", "offensive_content", "harassment", "other",
+}
+
+
+@router.post("/reports/activity")
+async def report_activity(
+    body: ActivityReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    act_result = await db.execute(select(Activity).where(Activity.id == body.activity_id))
+    activity = act_result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    if body.reason not in VALID_REPORT_REASONS:
+        raise HTTPException(status_code=400, detail="Invalid report reason")
+
+    # Prevent the same user spamming duplicate reports against the same
+    # activity — only one OPEN report per (reporter, activity).
+    dup = await db.execute(
+        select(ActivityReport).where(
+            ActivityReport.reporter_id == current_user.id,
+            ActivityReport.activity_id == body.activity_id,
+            ActivityReport.status.in_([ReportStatus.PENDING, ReportStatus.WARNED]),
+        )
+    )
+    if dup.scalars().first():
+        raise HTTPException(status_code=409, detail="You already reported this activity")
+
+    db.add(ActivityReport(
+        reporter_id=current_user.id,
+        activity_id=body.activity_id,
+        reason=body.reason,
+        details=(body.details or "").strip() or None,
+    ))
+    await db.commit()
+    return {"message": "Report submitted"}
+
+
+@router.post("/reports/user")
+async def report_user(
+    body: UserReportCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if body.reported_user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="You cannot report yourself")
+    if body.reason not in VALID_REPORT_REASONS:
+        raise HTTPException(status_code=400, detail="Invalid report reason")
+    user_result = await db.execute(select(User).where(User.id == body.reported_user_id))
+    target = user_result.scalars().first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    dup = await db.execute(
+        select(UserReport).where(
+            UserReport.reporter_id == current_user.id,
+            UserReport.reported_user_id == body.reported_user_id,
+            UserReport.status.in_([ReportStatus.PENDING, ReportStatus.WARNED]),
+        )
+    )
+    if dup.scalars().first():
+        raise HTTPException(status_code=409, detail="You already reported this user")
+
+    db.add(UserReport(
+        reporter_id=current_user.id,
+        reported_user_id=body.reported_user_id,
+        reason=body.reason,
+        details=(body.details or "").strip() or None,
+    ))
+    await db.commit()
+    return {"message": "Report submitted"}
+
+
+# ---------- Admin report dashboards ----------------------------------------
+
+@router.get("/admin/reports/activities", response_model=List[ReportedActivitySummary])
+async def admin_reported_activities(
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Summary view: one row per reported activity, sorted by report count desc."""
+    q = (
+        select(
+            ActivityReport.activity_id,
+            Activity.title,
+            User.username.label("creator_username"),
+            Activity.visibility_state,
+            sa_func.count(ActivityReport.id).label("report_count"),
+            sa_func.count(sa_func.nullif(ActivityReport.status != ReportStatus.PENDING, True)).label("pending_count"),
+            sa_func.max(ActivityReport.created_at).label("latest_report_at"),
+        )
+        .join(Activity, Activity.id == ActivityReport.activity_id)
+        .join(User, User.id == Activity.creator_id, isouter=True)
+        .group_by(ActivityReport.activity_id, Activity.title, User.username, Activity.visibility_state)
+        .order_by(sa_func.count(ActivityReport.id).desc(), sa_func.max(ActivityReport.created_at).desc())
+    )
+    rows = (await db.execute(q)).all()
+    return [
+        {
+            "activity_id": r.activity_id,
+            "title": r.title,
+            "creator_username": r.creator_username,
+            "visibility_state": r.visibility_state,
+            "report_count": r.report_count or 0,
+            "pending_count": r.pending_count or 0,
+            "latest_report_at": r.latest_report_at,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/admin/reports/users", response_model=List[ReportedUserSummary])
+async def admin_reported_users(
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    q = (
+        select(
+            UserReport.reported_user_id,
+            User.username,
+            User.display_name,
+            User.is_banned,
+            sa_func.count(UserReport.id).label("report_count"),
+            sa_func.count(sa_func.nullif(UserReport.status != ReportStatus.PENDING, True)).label("pending_count"),
+            sa_func.max(UserReport.created_at).label("latest_report_at"),
+        )
+        .join(User, User.id == UserReport.reported_user_id)
+        .group_by(UserReport.reported_user_id, User.username, User.display_name, User.is_banned)
+        .order_by(sa_func.count(UserReport.id).desc(), sa_func.max(UserReport.created_at).desc())
+    )
+    rows = (await db.execute(q)).all()
+    return [
+        {
+            "user_id": r.reported_user_id,
+            "username": r.username,
+            "display_name": r.display_name,
+            "is_banned": bool(r.is_banned),
+            "report_count": r.report_count or 0,
+            "pending_count": r.pending_count or 0,
+            "latest_report_at": r.latest_report_at,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/admin/reports/activities/{activity_id}", response_model=List[ActivityReportOut])
+async def admin_activity_report_detail(
+    activity_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    q = (
+        select(ActivityReport, User.username, Activity.title)
+        .join(User, User.id == ActivityReport.reporter_id)
+        .join(Activity, Activity.id == ActivityReport.activity_id)
+        .where(ActivityReport.activity_id == activity_id)
+        .order_by(ActivityReport.created_at.desc())
+    )
+    rows = (await db.execute(q)).all()
+    return [
+        {
+            "id": r.ActivityReport.id,
+            "reporter_id": r.ActivityReport.reporter_id,
+            "reporter_username": r.username,
+            "activity_id": r.ActivityReport.activity_id,
+            "activity_title": r.title,
+            "reason": r.ActivityReport.reason,
+            "details": r.ActivityReport.details,
+            "status": r.ActivityReport.status.value if hasattr(r.ActivityReport.status, "value") else str(r.ActivityReport.status),
+            "created_at": r.ActivityReport.created_at,
+            "resolved_at": r.ActivityReport.resolved_at,
+            "resolution_note": r.ActivityReport.resolution_note,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/admin/reports/users/{user_id}", response_model=List[UserReportOut])
+async def admin_user_report_detail(
+    user_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    reporter_alias = sa_func.coalesce  # placeholder; use plain join
+    from sqlalchemy.orm import aliased
+    Reporter = aliased(User)
+    Target = aliased(User)
+    q = (
+        select(UserReport, Reporter.username.label("reporter_username"), Target.username.label("reported_username"))
+        .join(Reporter, Reporter.id == UserReport.reporter_id)
+        .join(Target, Target.id == UserReport.reported_user_id)
+        .where(UserReport.reported_user_id == user_id)
+        .order_by(UserReport.created_at.desc())
+    )
+    rows = (await db.execute(q)).all()
+    return [
+        {
+            "id": r.UserReport.id,
+            "reporter_id": r.UserReport.reporter_id,
+            "reporter_username": r.reporter_username,
+            "reported_user_id": r.UserReport.reported_user_id,
+            "reported_username": r.reported_username,
+            "reason": r.UserReport.reason,
+            "details": r.UserReport.details,
+            "status": r.UserReport.status.value if hasattr(r.UserReport.status, "value") else str(r.UserReport.status),
+            "created_at": r.UserReport.created_at,
+            "resolved_at": r.UserReport.resolved_at,
+            "resolution_note": r.UserReport.resolution_note,
+        }
+        for r in rows
+    ]
+
+
+# ---------- Admin report resolution + moderation ---------------------------
+
+def _now_utc():
+    return datetime.now(timezone.utc)
+
+
+async def _close_activity_reports(activity_id: int, status_value: ReportStatus, note: Optional[str], admin_id: int, db: AsyncSession):
+    rows = (await db.execute(
+        select(ActivityReport).where(
+            ActivityReport.activity_id == activity_id,
+            ActivityReport.status.in_([ReportStatus.PENDING, ReportStatus.WARNED]),
+        )
+    )).scalars().all()
+    for r in rows:
+        r.status = status_value
+        r.resolved_at = _now_utc()
+        r.resolved_by_id = admin_id
+        if note:
+            r.resolution_note = note
+
+
+async def _close_user_reports(user_id: int, status_value: ReportStatus, note: Optional[str], admin_id: int, db: AsyncSession):
+    rows = (await db.execute(
+        select(UserReport).where(
+            UserReport.reported_user_id == user_id,
+            UserReport.status.in_([ReportStatus.PENDING, ReportStatus.WARNED]),
+        )
+    )).scalars().all()
+    for r in rows:
+        r.status = status_value
+        r.resolved_at = _now_utc()
+        r.resolved_by_id = admin_id
+        if note:
+            r.resolution_note = note
+
+
+@router.post("/admin/reports/activities/{activity_id}/resolve")
+async def admin_resolve_activity_reports(
+    activity_id: int,
+    body: ReportResolve,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve all pending reports for an activity. Optionally unpublish
+    or delete the activity in the same call."""
+    act_result = await db.execute(select(Activity).where(Activity.id == activity_id))
+    activity = act_result.scalars().first()
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+
+    action = (body.action or "").lower()
+    if action == "dismiss":
+        await _close_activity_reports(activity_id, ReportStatus.DISMISSED, body.note, current_admin.id, db)
+    elif action == "unpublish":
+        activity.visibility_state = "draft"
+        await _close_activity_reports(activity_id, ReportStatus.RESOLVED, body.note, current_admin.id, db)
+        # Optionally notify the creator
+        if activity.creator_id and activity.creator_id != current_admin.id:
+            db.add(Notification(
+                user_id=activity.creator_id,
+                type=NotificationType.ACTIVITY_FEEDBACK,
+                title="Activity unpublished",
+                message=(body.note or "Your activity was unpublished after community reports.")[:240],
+            ))
+    elif action == "delete":
+        await db.delete(activity)
+    elif action == "resolved":
+        # No content change, just mark all reports closed
+        await _close_activity_reports(activity_id, ReportStatus.RESOLVED, body.note, current_admin.id, db)
+    else:
+        raise HTTPException(status_code=400, detail="Unknown action")
+
+    await db.commit()
+    return {"message": "Reports updated", "action": action}
+
+
+@router.post("/admin/users/{user_id}/warn")
+async def admin_warn_user(
+    user_id: int,
+    body: AdminWarnBody,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send an in-app warning notification to a user. Marks the user's open
+    reports as WARNED so the admin can review whether the issue recurs."""
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    target = user_result.scalars().first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    msg = (body.message or "").strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Warning message is required")
+
+    db.add(Notification(
+        user_id=target.id,
+        type=NotificationType.ADMIN_WARNING,
+        title="Warning from EcoHealth Admin",
+        message=msg[:600],
+    ))
+    # Move pending reports against this user into WARNED so the next batch
+    # of reports clearly indicates the warning didn't stop the behaviour.
+    open_reports = (await db.execute(
+        select(UserReport).where(
+            UserReport.reported_user_id == user_id,
+            UserReport.status == ReportStatus.PENDING,
+        )
+    )).scalars().all()
+    for r in open_reports:
+        r.status = ReportStatus.WARNED
+        r.resolved_by_id = current_admin.id
+        r.resolution_note = f"Warning issued: {msg[:200]}"
+    await db.commit()
+    return {"message": "Warning sent", "reports_marked_warned": len(open_reports)}
+
+
+@router.post("/admin/users/{user_id}/ban")
+async def admin_ban_user(
+    user_id: int,
+    body: AdminBanBody,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    target = user_result.scalars().first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.is_admin:
+        raise HTTPException(status_code=400, detail="Cannot ban an admin")
+    target.is_banned = True
+    target.banned_at = _now_utc()
+    target.ban_reason = (body.reason or "").strip() or None
+    await _close_user_reports(user_id, ReportStatus.RESOLVED, body.reason, current_admin.id, db)
+    await db.commit()
+    return {"message": "User banned"}
+
+
+@router.post("/admin/users/{user_id}/unban")
+async def admin_unban_user(
+    user_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    target = user_result.scalars().first()
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    target.is_banned = False
+    target.banned_at = None
+    target.ban_reason = None
+    await db.commit()
+    return {"message": "User unbanned"}
+
+
+@router.post("/admin/reports/users/{user_id}/dismiss")
+async def admin_dismiss_user_reports(
+    user_id: int,
+    body: ReportResolve,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Close pending user reports without taking moderation action."""
+    await _close_user_reports(user_id, ReportStatus.DISMISSED, body.note, current_admin.id, db)
+    await db.commit()
+    return {"message": "Reports dismissed"}

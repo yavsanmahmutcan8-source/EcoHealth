@@ -128,6 +128,7 @@ class ActivityUpdate(BaseModel):
     route_polyline: Optional[str] = None
     map_boundaries: Optional[str] = None
     visibility_state: Optional[str] = None
+    submission_status: Optional[str] = None
 
 class ActivityOut(ActivityCreate):
     id: int
@@ -137,6 +138,8 @@ class ActivityOut(ActivityCreate):
     creator_username: Optional[str] = None
     creator_avatar_url: Optional[str] = None
     creator_is_admin: Optional[bool] = None
+    submission_status: Optional[str] = None
+    report_count: Optional[int] = 0
 
     class Config:
         from_attributes = True
@@ -228,6 +231,105 @@ class BadgeDefinitionOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# --- Phase 15: feedback, reports, moderation ----------------------------
+
+class ActivityFeedbackCreate(BaseModel):
+    message: str
+
+class ActivityFeedbackOut(BaseModel):
+    id: int
+    activity_id: int
+    admin_id: int
+    admin_username: Optional[str] = None
+    message: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class BulkActivityAction(BaseModel):
+    ids: List[int]
+    # one of: "publish", "draft", "delete"
+    action: str
+
+class BulkActionResult(BaseModel):
+    affected: int
+    action: str
+
+class ActivityReportCreate(BaseModel):
+    activity_id: int
+    reason: str
+    details: Optional[str] = None
+
+class UserReportCreate(BaseModel):
+    reported_user_id: int
+    reason: str
+    details: Optional[str] = None
+
+class ReportResolve(BaseModel):
+    # one of: "dismiss", "warn", "ban", "unpublish", "resolved"
+    action: str
+    note: Optional[str] = None
+    # When action="warn" or "ban" admin can include a message shown to the
+    # reported user as a notification.
+    user_message: Optional[str] = None
+
+class ActivityReportOut(BaseModel):
+    id: int
+    reporter_id: int
+    reporter_username: Optional[str] = None
+    activity_id: int
+    activity_title: Optional[str] = None
+    reason: str
+    details: Optional[str] = None
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    resolution_note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class UserReportOut(BaseModel):
+    id: int
+    reporter_id: int
+    reporter_username: Optional[str] = None
+    reported_user_id: int
+    reported_username: Optional[str] = None
+    reason: str
+    details: Optional[str] = None
+    status: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    resolution_note: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+class ReportedActivitySummary(BaseModel):
+    activity_id: int
+    title: str
+    creator_username: Optional[str] = None
+    visibility_state: Optional[str] = None
+    report_count: int
+    pending_count: int
+    latest_report_at: Optional[datetime] = None
+
+class ReportedUserSummary(BaseModel):
+    user_id: int
+    username: str
+    display_name: Optional[str] = None
+    is_banned: bool = False
+    report_count: int
+    pending_count: int
+    latest_report_at: Optional[datetime] = None
+
+class AdminWarnBody(BaseModel):
+    message: str
+
+class AdminBanBody(BaseModel):
+    reason: Optional[str] = None
 
 class NotificationOut(BaseModel):
     id: int

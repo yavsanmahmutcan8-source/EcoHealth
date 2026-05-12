@@ -5,8 +5,9 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { ArrowLeft, MapPin, Trophy, Star, Compass, User as UserIcon, Loader } from 'lucide-react';
+import { ArrowLeft, MapPin, Trophy, Star, Compass, User as UserIcon, Loader, Flag } from 'lucide-react';
 import { StarRating } from '../../components/ui/StarRating';
+import { ReportModal } from '../../components/ui/ReportModal';
 import styles from './PublicProfilePage.module.css';
 
 const TABS = [
@@ -20,9 +21,11 @@ export function PublicProfilePage() {
   const { username } = useParams();
   const navigate = useNavigate();
   const me = useAuthStore(state => state.user);
+  const token = useAuthStore(state => state.token);
   const addToast = useToastStore(state => state.addToast);
 
   const [profile, setProfile] = useState(null);
+  const [reportTarget, setReportTarget] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('activities');
   const [activities, setActivities] = useState([]);
@@ -136,6 +139,16 @@ export function PublicProfilePage() {
                   <span key={c} className={styles.chip}>{c}</span>
                 ))}
               </div>
+            )}
+
+            {token && me?.id !== profile.id && (
+              <button
+                type="button"
+                onClick={() => setReportTarget({ kind: 'user', id: profile.id, label: profile.display_name || profile.username })}
+                style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <Flag size={13} /> Report this user
+              </button>
             )}
           </div>
         </Card>
@@ -264,6 +277,12 @@ export function PublicProfilePage() {
           )}
         </Card>
       </main>
+
+      <ReportModal
+        isOpen={!!reportTarget}
+        onClose={() => setReportTarget(null)}
+        target={reportTarget}
+      />
     </div>
   );
 }
