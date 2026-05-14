@@ -44,7 +44,7 @@ class User(Base):
     ban_reason = Column(Text, nullable=True)
 
     activities = relationship("Activity", back_populates="creator")
-    reviews = relationship("Review", back_populates="user")
+    reviews = relationship("Review", back_populates="user", foreign_keys="Review.user_id")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
     # Reports filed against this user. `foreign_keys` disambiguates from the
     # reporter_id / resolved_by_id FKs which also point at user.id.

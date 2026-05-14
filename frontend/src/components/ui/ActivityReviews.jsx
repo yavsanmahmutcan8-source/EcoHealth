@@ -4,10 +4,10 @@ import { StarRating, RatingDisplay } from '../../components/ui/StarRating';
 import { Button } from '../../components/ui/Button';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
-import { MessageSquare, ChevronDown, ChevronUp, Send, Trash2, User } from 'lucide-react';
+import { MessageSquare, ChevronDown, ChevronUp, Send, Trash2, User, EyeOff, Eye } from 'lucide-react';
 import styles from './ActivityReviews.module.css';
 
-export function ActivityReviews({ activityId }) {
+export function ActivityReviews({ activityId, highlightReviewId }) {
   const navigate = useNavigate();
   const token = useAuthStore(state => state.token);
   const user = useAuthStore(state => state.user);
@@ -42,7 +42,10 @@ export function ActivityReviews({ activityId }) {
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/activities/${activityId}/reviews?sort=${sort}&order=${order}`);
+      // Pass auth so the backend can decide whether to surface hidden reviews
+      // to the author / admin.
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch(`/api/activities/${activityId}/reviews?sort=${sort}&order=${order}`, { headers });
       if (res.ok) {
         const data = await res.json();
         setReviews(data);
@@ -54,7 +57,7 @@ export function ActivityReviews({ activityId }) {
     } catch {} finally {
       setLoading(false);
     }
-  }, [activityId, sort, order, user]);
+  }, [activityId, sort, order, user, token]);
 
   useEffect(() => {
     if (activityId) {
@@ -106,6 +109,39 @@ export function ActivityReviews({ activityId }) {
       addToast(err.message, 'error');
     }
   };
+
+  const handleAdminHide = async (reviewId, hide) => {
+    try {
+      const url = `/api/admin/reviews/${reviewId}/${hide ? 'hide' : 'unhide'}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Action failed');
+      }
+      addToast(hide ? 'Comment hidden from other users' : 'Comment restored', 'success');
+      await fetchReviews();
+    } catch (err) {
+      addToast(err.message, 'error');
+    }
+  };
+
+  // Scroll + flash a target review when arriving via a notification link.
+  useEffect(() => {
+    if (!highlightReviewId || !expanded || loading) return;
+    const el = document.getElementById(`review-${highlightReviewId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add(styles.highlightFlash || 'highlightFlash');
+    }
+  }, [highlightReviewId, expanded, loading, reviews]);
+
+  // Auto-expand when a specific review is being targeted.
+  useEffect(() => {
+    if (highlightReviewId) setExpanded(true);
+  }, [highlightReviewId]);
 
   const formatDate = (dateStr) => {
     const d = new Date(dateStr);
@@ -181,37 +217,70 @@ export function ActivityReviews({ activityId }) {
             ) : reviews.length === 0 ? (
               <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', padding: '1rem' }}>No reviews yet. Be the first!</p>
             ) : (
-              reviews.map(review => (
-                <div key={review.id} className={styles.reviewCard}>
-                  <div className={styles.reviewHeader}>
-                    <div className={styles.reviewer}>
-                      <div className={styles.reviewerAvatar}><User size={14} /></div>
-                      {review.username ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/profile/${review.username}`); }}
-                          className={styles.reviewerName}
-                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
-                        >
-                          @{review.username}
-                        </button>
-                      ) : (
-                        <span className={styles.reviewerName}>User</span>
-                      )}
-                      <span className={styles.reviewDate}>{formatDate(review.created_at)}</span>
+              reviews.map(review => {
+                const isAuthor = review.user_id === user?.id;
+                const isAdmin = !!user?.is_admin;
+                const hidden = !!review.is_hidden;
+                const isHighlighted = String(review.id) === String(highlightReviewId);
+                return (
+                  <div
+                    key={review.id}
+                    id={`review-${review.id}`}
+                    className={styles.reviewCard}
+                    style={{
+                      opacity: hidden && !isAuthor && !isAdmin ? 0.5 : 1,
+                      borderLeft: hidden ? '3px solid #E53935' : (isHighlighted ? '3px solid var(--color-primary)' : undefined),
+                      background: hidden ? 'rgba(229,57,53,0.06)' : undefined,
+                    }}
+                  >
+                    {hidden && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: '#E53935', fontWeight: 600, marginBottom: '0.4rem' }}>
+                        <EyeOff size={13} />
+                        {isAuthor
+                          ? 'Removed by admin — this comment is hidden from other users.'
+                          : 'Hidden by admin'}
+                      </div>
+                    )}
+                    <div className={styles.reviewHeader}>
+                      <div className={styles.reviewer}>
+                        <div className={styles.reviewerAvatar}><User size={14} /></div>
+                        {review.username ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/profile/${review.username}`); }}
+                            className={styles.reviewerName}
+                            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit' }}
+                          >
+                            @{review.username}
+                          </button>
+                        ) : (
+                          <span className={styles.reviewerName}>User</span>
+                        )}
+                        <span className={styles.reviewDate}>{formatDate(review.created_at)}</span>
+                      </div>
+                      <div className={styles.reviewRight}>
+                        <StarRating rating={review.rating} readOnly size={14} />
+                        {isAuthor && (
+                          <button className={styles.deleteBtn} onClick={() => handleDelete(review.id)} title="Delete your review">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                        {isAdmin && !isAuthor && !hidden && (
+                          <button className={styles.deleteBtn} onClick={() => handleAdminHide(review.id, true)} title="Hide this comment from other users">
+                            <EyeOff size={14} />
+                          </button>
+                        )}
+                        {isAdmin && !isAuthor && hidden && (
+                          <button className={styles.deleteBtn} onClick={() => handleAdminHide(review.id, false)} title="Restore this comment">
+                            <Eye size={14} />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className={styles.reviewRight}>
-                      <StarRating rating={review.rating} readOnly size={14} />
-                      {(review.user_id === user?.id || user?.is_admin) && (
-                        <button className={styles.deleteBtn} onClick={() => handleDelete(review.id)} title="Delete review">
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
+                    {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
                   </div>
-                  {review.comment && <p className={styles.reviewComment}>{review.comment}</p>}
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

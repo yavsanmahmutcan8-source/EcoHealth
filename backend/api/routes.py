@@ -21,7 +21,7 @@ from models.activity_feedback import ActivityFeedback
 from models.report import ActivityReport, UserReport, ReportStatus
 from datetime import datetime, timezone
 from core.security import verify_password, get_password_hash, create_access_token
-from api.deps import get_current_user, get_current_active_admin
+from api.deps import get_current_user, get_current_active_admin, get_current_user_optional
 from api.schemas import (
     UserCreate, UserOut, Token, ActivityCreate, ActivityOut, AdminUserUpdate, ActivityUpdate,
     ActivityCompletionBody, ActivityCompletionResult, CategoryCreate, CategoryUpdate, CategoryOut,
@@ -722,37 +722,47 @@ async def get_reviews(
     activity_id: int,
     sort: Optional[str] = Query("date", regex="^(rating|date)$"),
     order: Optional[str] = Query("desc", regex="^(asc|desc)$"),
-    db: AsyncSession = Depends(get_db)
+    current_user: Optional[User] = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
 ):
     query = select(Review, User.username).join(User, Review.user_id == User.id).where(
         Review.activity_id == activity_id
     )
-    
+
     if sort == "rating":
         col = Review.rating
     else:
         col = Review.created_at
-    
+
     if order == "asc":
         query = query.order_by(col.asc())
     else:
         query = query.order_by(col.desc())
-    
+
     result = await db.execute(query)
     rows = result.all()
-    
-    return [
-        ReviewOut(
+
+    # Hidden reviews stay visible to (a) the author themselves, and
+    # (b) admins. Everyone else sees them filtered out — they look like a
+    # normal moderated-thread to other users.
+    is_admin = bool(current_user and current_user.is_admin)
+    me_id = current_user.id if current_user else None
+
+    out = []
+    for review, username in rows:
+        if review.is_hidden and not is_admin and review.user_id != me_id:
+            continue
+        out.append(ReviewOut(
             id=review.id,
             user_id=review.user_id,
             activity_id=review.activity_id,
             rating=review.rating,
             comment=review.comment,
             created_at=review.created_at,
-            username=username
-        )
-        for review, username in rows
-    ]
+            username=username,
+            is_hidden=review.is_hidden,
+        ))
+    return out
 
 @router.delete("/reviews/{review_id}")
 async def delete_review(
@@ -760,16 +770,56 @@ async def delete_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """Hard delete by the author; admins use POST /admin/reviews/{id}/hide
+    instead, which soft-hides the review (author keeps a tombstone)."""
     result = await db.execute(select(Review).where(Review.id == review_id))
     review = result.scalars().first()
     if not review:
         raise HTTPException(status_code=404, detail="Review not found")
-    # Only the author or an admin can delete
-    if review.user_id != current_user.id and not current_user.is_admin:
+    # Only the author can hard-delete. Admins should be using the soft-hide
+    # endpoint so the author still sees the moderated comment with a marker.
+    if review.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this review")
     await db.delete(review)
     await db.commit()
     return {"message": "Review deleted successfully"}
+
+
+@router.post("/admin/reviews/{review_id}/hide")
+async def admin_hide_review(
+    review_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-hide a comment. Stays in the DB and remains visible to the
+    author (with a "removed by admin" marker on the frontend) but gets
+    filtered out for everyone else."""
+    result = await db.execute(select(Review).where(Review.id == review_id))
+    review = result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    review.is_hidden = True
+    review.hidden_at = datetime.now(timezone.utc)
+    review.hidden_by_admin_id = current_admin.id
+    await db.commit()
+    return {"ok": True, "review_id": review_id}
+
+
+@router.post("/admin/reviews/{review_id}/unhide")
+async def admin_unhide_review(
+    review_id: int,
+    current_admin: User = Depends(get_current_active_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Review).where(Review.id == review_id))
+    review = result.scalars().first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    review.is_hidden = False
+    review.hidden_at = None
+    review.hidden_by_admin_id = None
+    await db.commit()
+    return {"ok": True, "review_id": review_id}
 
 @router.get("/activities/{activity_id}/rating")
 async def get_activity_rating(
@@ -1265,6 +1315,8 @@ async def admin_send_activity_feedback(
             type=NotificationType.ACTIVITY_FEEDBACK,
             title="Activity feedback received",
             message=f"Admin left feedback on '{activity.title}': {body.message.strip()[:160]}",
+            # Deep-link straight into the resubmit/edit screen.
+            link=f"/create?edit={activity.id}",
         ))
 
     await db.commit()
@@ -1684,6 +1736,7 @@ async def admin_resolve_activity_reports(
                 type=NotificationType.ACTIVITY_FEEDBACK,
                 title="Activity unpublished",
                 message=(body.note or "Your activity was unpublished after community reports.")[:240],
+                link=f"/create?edit={activity.id}",
             ))
     elif action == "delete":
         await db.delete(activity)
@@ -1715,11 +1768,27 @@ async def admin_warn_user(
     if not msg:
         raise HTTPException(status_code=400, detail="Warning message is required")
 
+    # Resolve a click-through destination so the warned user lands on the
+    # exact thing the warning is about.
+    link: Optional[str] = None
+    if body.review_id is not None:
+        rev = (await db.execute(select(Review).where(Review.id == body.review_id))).scalars().first()
+        if rev and rev.user_id == target.id:
+            # Soft-hide the offending comment so it disappears for everyone
+            # else; the author still sees it with a "removed by admin" marker.
+            rev.is_hidden = True
+            rev.hidden_at = datetime.now(timezone.utc)
+            rev.hidden_by_admin_id = current_admin.id
+            link = f"/explore?preview={rev.activity_id}&review={rev.id}"
+    elif body.activity_id is not None:
+        link = f"/explore?preview={body.activity_id}"
+
     db.add(Notification(
         user_id=target.id,
         type=NotificationType.ADMIN_WARNING,
         title="Warning from EcoHealth Admin",
         message=msg[:600],
+        link=link,
     ))
     # Move pending reports against this user into WARNED so the next batch
     # of reports clearly indicates the warning didn't stop the behaviour.

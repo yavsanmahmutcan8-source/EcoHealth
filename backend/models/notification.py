@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from db.base_class import Base
@@ -22,6 +22,10 @@ class Notification(Base):
     title = Column(String)
     message = Column(String)
     is_read = Column(Boolean, default=False)
+    # Optional in-app destination for click-through. Set by callers when a
+    # notification has a single, obvious target (e.g. an activity edit screen,
+    # a moderated comment).
+    link = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="notifications")

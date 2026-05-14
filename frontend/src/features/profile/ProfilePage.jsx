@@ -69,10 +69,10 @@ export function ProfilePage() {
 
   const statusPill = (a) => {
     if (a.submission_status === 'changes_requested') {
-      return { label: '📝 Changes requested', bg: 'rgba(255,193,7,0.15)', color: '#b8860b', border: 'rgba(255,193,7,0.5)' };
+      return { label: '📝 Needs Changes', bg: 'rgba(255,193,7,0.15)', color: '#b8860b', border: 'rgba(255,193,7,0.5)' };
     }
     if (a.submission_status === 'pending_review') {
-      return { label: '⏳ Awaiting review', bg: 'rgba(33,150,243,0.15)', color: '#1976d2', border: 'rgba(33,150,243,0.5)' };
+      return { label: '⏳ In Review', bg: 'rgba(33,150,243,0.15)', color: '#1976d2', border: 'rgba(33,150,243,0.5)' };
     }
     if (a.visibility_state === 'draft') {
       return { label: '📄 Draft', bg: 'rgba(150,150,150,0.15)', color: '#666', border: 'rgba(150,150,150,0.5)' };

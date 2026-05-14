@@ -44,3 +44,28 @@ async def get_current_active_admin(current_user: User = Depends(get_current_user
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="The user doesn't have enough privileges")
     return current_user
+
+
+# Optional auth: returns None when no token is present (or token is invalid).
+# Used by endpoints that need to know "is this the author?" without forcing
+# unauthenticated callers to log in.
+_optional_oauth2 = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+async def get_current_user_optional(
+    token: str | None = Depends(_optional_oauth2),
+    db: AsyncSession = Depends(get_db),
+):
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            return None
+    except jwt.PyJWTError:
+        return None
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalars().first()
+    if user is None or getattr(user, "is_banned", False):
+        return None
+    return user

@@ -1,10 +1,12 @@
 import React, { useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../../store/notificationStore';
 import { useAuthStore } from '../../store/authStore';
-import { Check, Trophy, ChevronUp, Bell, Activity, Info, Flag, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Check, Trophy, ChevronUp, Bell, Activity, Info, Flag, MessageSquare, AlertTriangle, ChevronRight } from 'lucide-react';
 import styles from './NotificationDropdown.module.css';
 
 export function NotificationDropdown({ isOpen, onClose }) {
+  const navigate = useNavigate();
   const token = useAuthStore(state => state.token);
   const { notifications, unreadCount, fetchNotifications, markAsRead, markAllAsRead, loading } = useNotificationStore();
   const dropdownRef = useRef(null);
@@ -62,27 +64,40 @@ export function NotificationDropdown({ isOpen, onClose }) {
             <p>No notifications yet</p>
           </div>
         ) : (
-          notifications.map(notif => (
-            <div 
-              key={notif.id} 
-              className={`${styles.item} ${!notif.is_read ? styles.unread : ''}`}
-              onClick={() => {
-                if (!notif.is_read) markAsRead(notif.id, token);
-              }}
-            >
-              <div className={styles.iconWrapper}>
-                {getIcon(notif.type)}
+          notifications.map(notif => {
+            const hasLink = !!notif.link;
+            return (
+              <div
+                key={notif.id}
+                className={`${styles.item} ${!notif.is_read ? styles.unread : ''}`}
+                style={hasLink ? { cursor: 'pointer' } : undefined}
+                onClick={() => {
+                  if (!notif.is_read) markAsRead(notif.id, token);
+                  if (hasLink) {
+                    onClose();
+                    navigate(notif.link);
+                  }
+                }}
+              >
+                <div className={styles.iconWrapper}>
+                  {getIcon(notif.type)}
+                </div>
+                <div className={styles.content}>
+                  <h4>{notif.title}</h4>
+                  <p>{notif.message}</p>
+                  <span className={styles.time}>
+                    {new Date(notif.created_at).toLocaleDateString()}
+                    {hasLink && (
+                      <span style={{ marginLeft: '0.5rem', color: 'var(--color-primary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                        · View <ChevronRight size={12} />
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {!notif.is_read && <div className={styles.unreadDot} />}
               </div>
-              <div className={styles.content}>
-                <h4>{notif.title}</h4>
-                <p>{notif.message}</p>
-                <span className={styles.time}>
-                  {new Date(notif.created_at).toLocaleDateString()}
-                </span>
-              </div>
-              {!notif.is_read && <div className={styles.unreadDot} />}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

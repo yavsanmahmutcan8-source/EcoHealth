@@ -198,6 +198,7 @@ class ReviewOut(BaseModel):
     comment: Optional[str]
     created_at: datetime
     username: Optional[str] = None  # populated by join
+    is_hidden: bool = False  # author-visible only; everyone else gets it filtered out
 
     class Config:
         from_attributes = True
@@ -327,6 +328,10 @@ class ReportedUserSummary(BaseModel):
 
 class AdminWarnBody(BaseModel):
     message: str
+    # Optional click-through context. If review_id is set, the notification
+    # also auto-hides the comment so the warned user sees a moderation marker.
+    activity_id: Optional[int] = None
+    review_id: Optional[int] = None
 
 class AdminBanBody(BaseModel):
     reason: Optional[str] = None
@@ -338,6 +343,7 @@ class NotificationOut(BaseModel):
     title: str
     message: str
     is_read: bool
+    link: Optional[str] = None
     created_at: datetime
 
     class Config:

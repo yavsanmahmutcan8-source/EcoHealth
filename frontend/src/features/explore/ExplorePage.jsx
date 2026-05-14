@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Navbar } from '../../components/layout/Navbar';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -42,6 +42,9 @@ function ChangeView({ center }) {
 
 export function ExplorePage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const previewIdParam = searchParams.get('preview');
+  const reviewIdParam = searchParams.get('review');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [activities, setActivities] = useState([]);
@@ -107,6 +110,31 @@ export function ExplorePage() {
   const handleMapPan = (lat, lng) => {
     fetchActivities(lat, lng);
   };
+
+  // Deep-link from a notification: /explore?preview=<id>&review=<rid>
+  // Fetches the single activity if it isn't in the current list yet (e.g.
+  // out-of-radius) and opens the preview modal automatically.
+  useEffect(() => {
+    if (!previewIdParam) return;
+    // Try the already-fetched list first.
+    const found = activities.find(a => String(a.id) === String(previewIdParam));
+    if (found) {
+      setPreviewActivity(found);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/activities/${previewIdParam}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(a => {
+        if (!cancelled && a) setPreviewActivity({
+          ...a,
+          time: a.time || '1 hr',
+          loc: a.latitude != null ? `Lat: ${a.latitude.toFixed(2)}, Lon: ${a.longitude.toFixed(2)}` : '',
+        });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [previewIdParam, activities]);
 
   const filtered = activities.filter(a => {
     const matchesSearch = a.title.toLowerCase().includes(search.toLowerCase());
@@ -218,7 +246,20 @@ export function ExplorePage() {
       </main>
 
       {/* Activity Preview Modal */}
-      <Modal isOpen={!!previewActivity} onClose={() => setPreviewActivity(null)} title={previewActivity?.title || 'Activity Details'}>
+      <Modal
+        isOpen={!!previewActivity}
+        onClose={() => {
+          setPreviewActivity(null);
+          // Strip preview/review query params so re-opens use a clean URL.
+          if (previewIdParam || reviewIdParam) {
+            const next = new URLSearchParams(searchParams);
+            next.delete('preview');
+            next.delete('review');
+            setSearchParams(next, { replace: true });
+          }
+        }}
+        title={previewActivity?.title || 'Activity Details'}
+      >
         {previewActivity && (
           <div style={{ textAlign: 'center' }}>
             {previewActivity.creator_username && (
@@ -307,7 +348,7 @@ export function ExplorePage() {
             )}
 
             {/* Reviews section */}
-            <ActivityReviews activityId={previewActivity.id} />
+            <ActivityReviews activityId={previewActivity.id} highlightReviewId={reviewIdParam} />
           </div>
         )}
       </Modal>

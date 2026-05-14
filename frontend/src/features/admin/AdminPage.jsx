@@ -337,10 +337,16 @@ export function AdminPage() {
   const submitWarning = async () => {
     if (!warnTarget || !warnMessage.trim()) return;
     try {
+      const body = { message: warnMessage.trim() };
+      // Optional click-through context. When the warning targets a specific
+      // comment/activity, the backend deep-links the notification + soft-hides
+      // the comment so other users stop seeing it.
+      if (warnTarget.review_id) body.review_id = Number(warnTarget.review_id);
+      if (warnTarget.activity_id) body.activity_id = Number(warnTarget.activity_id);
       const res = await fetch(`/api/admin/users/${warnTarget.user_id || warnTarget.id}/warn`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ message: warnMessage.trim() }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed');
       addToast('Warning sent', 'success');
@@ -917,6 +923,31 @@ export function AdminPage() {
           placeholder="e.g. We've received reports about your recent comments. Please keep things respectful."
           style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--glass-border)', background: 'var(--glass-bg)', color: 'var(--color-text)', resize: 'vertical', fontFamily: 'inherit' }}
         />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginTop: '0.5rem' }}>
+          <div>
+            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Review ID (optional)</label>
+            <input
+              type="number"
+              value={warnTarget?.review_id || ''}
+              onChange={e => setWarnTarget(t => t ? { ...t, review_id: e.target.value } : t)}
+              placeholder="Hide a specific comment"
+              style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--glass-bg)', color: 'var(--color-text)' }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>Activity ID (optional)</label>
+            <input
+              type="number"
+              value={warnTarget?.activity_id || ''}
+              onChange={e => setWarnTarget(t => t ? { ...t, activity_id: e.target.value } : t)}
+              placeholder="Link notification to activity"
+              style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--glass-border)', background: 'var(--glass-bg)', color: 'var(--color-text)' }}
+            />
+          </div>
+        </div>
+        <p style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.4rem' }}>
+          Setting a Review ID also hides that comment from other users (the author still sees it with a moderation marker).
+        </p>
         <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
           <Button variant="secondary" onClick={() => { setWarnTarget(null); setWarnMessage(''); }}>Cancel</Button>
           <Button variant="primary" onClick={submitWarning} disabled={!warnMessage.trim()}>Send Warning</Button>
